@@ -475,64 +475,37 @@ def draw_visuals(screen, vis_surf, state):
         x1 = int(x0[i] + L * COS_ARR[i])
         y1 = int(y0[i] + L * SIN_ARR[i])
         pygame.draw.line(vis_surf, (*VIS.bar_color, 255), (x0[i], y0[i]), (x1, y1), width=VIS.bar_thickness)
-    n_points = 32
+    # >>> ZMENA: Amorfný kruh s pokriveným povrchom <<<
+    # Vytvoríme pole bodov pre kruh
+    n_points = 64
     angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
     points = []
-
-    # >>> ZMENA: Amorfný, organický Flubber <<<
-    # Použijeme aktuálny čas pre náhodné, ale plynulé pohyby
-    time_offset = time.time() * 2.0
-
+    jitter = 0.05
     for i in range(n_points):
         angle = angles[i]
-        # Získame index pásma pre tento bod
-        idx = int((i / n_points) * VIS.n_bands) % VIS.n_bands
-
-        # Základný polomer (menší, ako bol predtým)
-        base_r = radius * 0.35
-
-        # 1. Bázový puls z basov a hlasu
-        pulse = 0.4 * state["bass_env"] + 0.3 * state["voice_env"]
-
-        # 2. Dynamický faktor z FFT pásma pre tento konkrétny bod
-        fft_factor = 0.3 * state["bands"][idx]
-
-        # 3. Náhodný, ale plynulý "dýchanie" efekt pre celý objekt
-        breathe = 0.1 * math.sin(time_offset * 0.7 + i * 0.1)
-
-        # 4. Silný, náhodný "škubanie" efekt, ktorý sa zosilňuje pri basoch
-        jitter = 0.2 * state["bass_env"] * (random.random() - 0.5)
-
-        # 5. Veľmi pomalá, globálna zmena tvaru
-        morph = 0.1 * math.sin(time_offset * 0.1)
-
-        # Kombinujeme všetky efekty
-        r = base_r * (1.0 + pulse + fft_factor + breathe + jitter + morph)
-
-        # Umožníme presahovať za kruh pri silných basoch alebo hlase
-        if state["bass_env"] > 0.7 or state["voice_env"] > 0.7:
-            r *= (1.0 + 0.5 * max(state["bass_env"], state["voice_env"]))
-
-        # Vypočítame konečnú pozíciu bodu
+        # Základný polomer
+        base_r = radius * 0.4
+        # Dynamická zmena polomeru podľa hudby a náhodnosti
+        # r = base_r * (1 + 1.5 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][i % VIS.n_bands] + jitter * (random.random() - 0.5))
+        # >>> ZMENA: Odstránené ohraničenie, Flubber môže voľne pretekať + MINIMÁLNA VEĽKOSŤ <<<
+        # r = max(base_r * 0.7, base_r * (1 + 1.5 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][idx] + jitter * (random.random() - 0.5)))
+        # >>> ZMENA: Odstránené ohraničenie, Flubber môže voľne pretekať <<<
+        r = base_r * (0.2 + 1 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][i % VIS.n_bands] + jitter * (random.random() - 0.5))
+        # Vypočítame pozíciu bodu
         x = cx + r * np.cos(angle)
         y = cy + r * np.sin(angle)
         points.append((int(x), int(y)))
-
-    def catmull_rom(p0, p1, p2, p3, t):
-        return (
-            0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t**2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t**3),
-            0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t**2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t**3)
-        )
-    ctrl = []
-    for i in range(len(points)):
-        p0 = points[(i - 1) % len(points)]
-        p1 = points[i]
-        p2 = points[(i + 1) % len(points)]
-        p3 = points[(i + 2) % len(points)]
-        ctrl.append(catmull_rom(p0, p1, p2, p3, 0.5))
+    # Kreslenie kruhu ako polygonu z týchto bodov
     glow_color = lerp_color((255, 50, 0), (255, 150, 0), state["bass_env"])
-    gfxdraw.filled_polygon(vis_surf, ctrl, glow_color)
-    gfxdraw.aapolygon(vis_surf, ctrl, (255, 100, 0))
+    gfxdraw.filled_polygon(vis_surf, points, glow_color)
+    gfxdraw.aapolygon(vis_surf, points, (255, 100, 0))
+    # Samostatný kruh pre hlas
+    if state["voice_env"] > 0.01:
+        voice_radius = int(radius * 0.7 * (1.0 + 0.5 * state["voice_env"]))
+        voice_alpha = int(lerp(VIS.voice_alpha_min, VIS.voice_alpha_max, state["voice_env"]))
+        voice_color = (*VIS.voice_base_color, voice_alpha)
+        pygame.draw.circle(vis_surf, voice_color, (cx, cy), voice_radius, width=3)
+
     glow1 = build_glow_circle_surface(radius, glow=10, color_rgb=glow_color, thickness=2)
     blit_center(vis_surf, glow1, (cx, cy))
     pulse_rad = int(radius * 0.85 * (1 + 0.1 * state["bass_env"]))
@@ -708,14 +681,21 @@ def main():
         pad = 14
         lines = [
             "H – Help (toggle)",
-            "1..5 – View presets   |   V – Next preset   |   F2 – All combinations",
-            "F – Fake Fullscreen     T – Always on Top",
-            "B – Toggle Backgrounds     [ / ] – Prev/Next BG",
-            "O – Opacity -5%     Shift+O – Opacity +5%",
-            "Space – Pause/Resume     N / P – Next / Prev Track",
-            "S – Shuffle (after first)     R – Repeat All",
-            "← / → – Seek -5s / +5s",
-            "Mouse Wheel – Volume     LMB drag – Move window (no BG)",
+            "1 – View preset 1     2 – View preset 2     3 – View preset 3",
+            "4 – View preset 4     5 – View preset 5     V – Next preset",
+            "F2 – Cycle all view combinations",
+            "F – Toggle Fake Fullscreen",
+            "T – Toggle Always on Top",
+            "B – Toggle Backgrounds",
+            "[ – Previous Background     ] – Next Background",
+            "O – Decrease Opacity     Shift+O – Increase Opacity",
+            "Space – Pause/Resume",
+            "N – Next Track     P – Previous Track",
+            "S – Toggle Shuffle (after first)     R – Toggle Repeat All",
+            "← – Seek -5 seconds     → – Seek +5 seconds",
+            "↑ – Volume Up     ↓ – Volume Down     M – Mute/Unmute",
+            "Mouse Wheel – Volume",
+            "LMB drag – Move window (when no background)",
             "Esc / Q – Quit"
         ]
         if args.webterm:
@@ -797,6 +777,7 @@ def main():
         chan_main.set_volume(volume, volume)
         playback_mode = "channel"
     volume = 0.85
+    last_unmuted_volume = 0.85  # Pre funkciu Mute
     play_track_music(current_track, 0.0, volume)
     play_start_monotonic = time.monotonic()
     paused = False
