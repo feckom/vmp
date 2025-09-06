@@ -475,37 +475,25 @@ def draw_visuals(screen, vis_surf, state):
         x1 = int(x0[i] + L * COS_ARR[i])
         y1 = int(y0[i] + L * SIN_ARR[i])
         pygame.draw.line(vis_surf, (*VIS.bar_color, 255), (x0[i], y0[i]), (x1, y1), width=VIS.bar_thickness)
-    # >>> ZMENA: Amorfný kruh s pokriveným povrchom <<<
-    # Vytvoríme pole bodov pre kruh
     n_points = 64
     angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
     points = []
     jitter = 0.05
     for i in range(n_points):
         angle = angles[i]
-        # Základný polomer
         base_r = radius * 0.4
-        # Dynamická zmena polomeru podľa hudby a náhodnosti
-        # r = base_r * (1 + 1.5 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][i % VIS.n_bands] + jitter * (random.random() - 0.5))
-        # >>> ZMENA: Odstránené ohraničenie, Flubber môže voľne pretekať + MINIMÁLNA VEĽKOSŤ <<<
-        # r = max(base_r * 0.7, base_r * (1 + 1.5 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][idx] + jitter * (random.random() - 0.5)))
-        # >>> ZMENA: Odstránené ohraničenie, Flubber môže voľne pretekať <<<
-        r = base_r * (0.2 + 1 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][i % VIS.n_bands] + jitter * (random.random() - 0.5))
-        # Vypočítame pozíciu bodu
+        r = base_r * (0.15 + 1.7 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][i % VIS.n_bands] + jitter * (random.random() - 0.5))
         x = cx + r * np.cos(angle)
         y = cy + r * np.sin(angle)
         points.append((int(x), int(y)))
-    # Kreslenie kruhu ako polygonu z týchto bodov
     glow_color = lerp_color((255, 50, 0), (255, 150, 0), state["bass_env"])
     gfxdraw.filled_polygon(vis_surf, points, glow_color)
     gfxdraw.aapolygon(vis_surf, points, (255, 100, 0))
-    # Samostatný kruh pre hlas
     if state["voice_env"] > 0.01:
         voice_radius = int(radius * 0.7 * (1.0 + 0.5 * state["voice_env"]))
         voice_alpha = int(lerp(VIS.voice_alpha_min, VIS.voice_alpha_max, state["voice_env"]))
         voice_color = (*VIS.voice_base_color, voice_alpha)
         pygame.draw.circle(vis_surf, voice_color, (cx, cy), voice_radius, width=3)
-
     glow1 = build_glow_circle_surface(radius, glow=10, color_rgb=glow_color, thickness=2)
     blit_center(vis_surf, glow1, (cx, cy))
     pulse_rad = int(radius * 0.85 * (1 + 0.1 * state["bass_env"]))
@@ -523,6 +511,18 @@ def draw_visuals(screen, vis_surf, state):
         halo = build_glow_circle_surface(radius + 8, glow=36, color_rgb=energy_color, thickness=3)
         halo.set_alpha(int(255 * state["flash"]))
         blit_center(vis_surf, halo, (cx, cy))
+def extract_palette_from_image(image: pygame.Surface, num_colors: int = 5) -> List[Tuple[int, int, int]]:
+    try:
+        image = pygame.transform.smoothscale(image, (100, 100))
+        pixels = pygame.surfarray.array3d(image)
+        pixels = pixels.reshape(-1, 3)
+        from sklearn.cluster import KMeans
+        kmeans = KMeans(n_clusters=num_colors, n_init=10)
+        kmeans.fit(pixels)
+        colors = kmeans.cluster_centers_.astype(int)
+        return [tuple(c) for c in colors]
+    except Exception:
+        return [VIS.glow_color, VIS.bar_color, VIS.red, VIS.yellow, VIS.white]
 def main():
     args = parse_args()
     webterm_handler = WebTermHandler() if args.webterm else None
@@ -616,8 +616,9 @@ def main():
     bg_dark: Optional[pygame.Surface] = None
     original_bg_surface: Optional[pygame.Surface] = None
     bg_size_cache: Dict[Tuple[int,int], pygame.Surface] = {}
+    current_palette = [VIS.glow_color, VIS.bar_color, VIS.red, VIS.yellow, VIS.white]
     def choose_background(force=False):
-        nonlocal current_bg, bg_dark, bg_index, original_bg_surface, bg_size_cache
+        nonlocal current_bg, bg_dark, bg_index, original_bg_surface, bg_size_cache, current_palette
         if not bg_enabled or not bg_paths:
             current_bg=None; bg_dark=None; original_bg_surface=None; bg_size_cache.clear(); return
         if force:
@@ -635,6 +636,7 @@ def main():
             x=(img.get_width()-w)//2; y=(img.get_height()-h)//2
             current_bg=img.subsurface(pygame.Rect(x,y,w,h)).copy()
             bg_dark=pygame.Surface((w,h), pygame.SRCALPHA); bg_dark.fill((0,0,0,110))
+            current_palette = extract_palette_from_image(current_bg)
             log.debug("Background loaded: %s", p.name)
         except Exception as e:
             log.debug("BG load fail: %s", e); current_bg=None; bg_dark=None; original_bg_surface=None; bg_size_cache.clear()
@@ -681,19 +683,30 @@ def main():
         pad = 14
         lines = [
             "H – Help (toggle)",
-            "1 – View preset 1     2 – View preset 2     3 – View preset 3",
-            "4 – View preset 4     5 – View preset 5     V – Next preset",
+            "1 – View preset 1",
+            "2 – View preset 2",
+            "3 – View preset 3",
+            "4 – View preset 4",
+            "5 – View preset 5",
+            "V – Next preset",
             "F2 – Cycle all view combinations",
             "F – Toggle Fake Fullscreen",
             "T – Toggle Always on Top",
             "B – Toggle Backgrounds",
-            "[ – Previous Background     ] – Next Background",
-            "O – Decrease Opacity     Shift+O – Increase Opacity",
+            "[ – Previous Background",
+            "] – Next Background",
+            "O – Decrease Opacity",
+            "Shift+O – Increase Opacity",
             "Space – Pause/Resume",
-            "N – Next Track     P – Previous Track",
-            "S – Toggle Shuffle (after first)     R – Toggle Repeat All",
-            "← – Seek -5 seconds     → – Seek +5 seconds",
-            "↑ – Volume Up     ↓ – Volume Down     M – Mute/Unmute",
+            "N – Next Track",
+            "P – Previous Track",
+            "S – Toggle Shuffle (after first)",
+            "R – Toggle Repeat All",
+            "← – Seek -5 seconds",
+            "→ – Seek +5 seconds",
+            "↑ – Volume Up",
+            "↓ – Volume Down",
+            "M – Mute/Unmute",
             "Mouse Wheel – Volume",
             "LMB drag – Move window (when no background)",
             "Esc / Q – Quit"
@@ -777,7 +790,8 @@ def main():
         chan_main.set_volume(volume, volume)
         playback_mode = "channel"
     volume = 0.85
-    last_unmuted_volume = 0.85  # Pre funkciu Mute
+    last_unmuted_volume = 0.85
+    muted = False
     play_track_music(current_track, 0.0, volume)
     play_start_monotonic = time.monotonic()
     paused = False
@@ -1188,6 +1202,44 @@ def main():
                     seek_relative(+5.0); reset_text_caches()
                 elif ev.key == pygame.K_LEFT:
                     seek_relative(-5.0); reset_text_caches()
+                elif ev.key == pygame.K_m:
+                    if muted:
+                        volume = last_unmuted_volume
+                        muted = False
+                        if playback_mode == "music":
+                            pygame.mixer.music.set_volume(volume)
+                        else:
+                            chan_main.set_volume(volume, volume)
+                        log.debug("Unmuted. Volume restored to %.2f", volume)
+                    else:
+                        last_unmuted_volume = volume
+                        volume = 0.0
+                        muted = True
+                        if playback_mode == "music":
+                            pygame.mixer.music.set_volume(volume)
+                        else:
+                            chan_main.set_volume(volume, volume)
+                        log.debug("Muted. Volume set to 0.0")
+                    last_volume_popup_t = time.time()
+                elif ev.key == pygame.K_UP:
+                    volume = min(1.0, volume + 0.05)
+                    if playback_mode == "music":
+                        pygame.mixer.music.set_volume(volume)
+                    else:
+                        chan_main.set_volume(volume, volume)
+                    muted = False
+                    last_volume_popup_t = time.time()
+                    log.debug("Volume Up -> %.2f", volume)
+                elif ev.key == pygame.K_DOWN:
+                    volume = max(0.0, volume - 0.05)
+                    if playback_mode == "music":
+                        pygame.mixer.music.set_volume(volume)
+                    else:
+                        chan_main.set_volume(volume, volume)
+                    if volume <= 0.0:
+                        muted = True
+                    last_volume_popup_t = time.time()
+                    log.debug("Volume Down -> %.2f", volume)
             if ev.type == pygame.MOUSEWHEEL:
                 volume = float(np.clip(volume + ev.y * 0.03, 0.0, 1.0))
                 if playback_mode == "music": pygame.mixer.music.set_volume(volume)
@@ -1199,11 +1251,14 @@ def main():
                     volume = min(1.0, volume + 0.03)
                     if playback_mode == "music": pygame.mixer.music.set_volume(volume)
                     else: chan_main.set_volume(volume, volume)
+                    muted = False
                     last_volume_popup_t = time.time(); log.debug("Volume + -> %.0f%%", volume*100)
                 elif ev.button == 5:
                     volume = max(0.0, volume - 0.03)
                     if playback_mode == "music": pygame.mixer.music.set_volume(volume)
                     else: chan_main.set_volume(volume, volume)
+                    if volume <= 0.0:
+                        muted = True
                     last_volume_popup_t = time.time(); log.debug("Volume - -> %.0f%%", volume*100)
                 elif ev.button == 1 and not current_bg:
                     win_drag_window()
@@ -1287,6 +1342,14 @@ def main():
             else:
                 voice_env += (AUDIO.voice_rel_slow if voice_norm < 0.1 else AUDIO.voice_rel_fast) * (voice_norm - voice_env)
             voice_env = max(0.0, min(1.0, voice_env))
+        if current_palette and len(current_palette) >= 3:
+            VIS.glow_color = current_palette[0]
+            VIS.bar_color = current_palette[1]
+            VIS.red = current_palette[2]
+            if len(current_palette) >= 4:
+                VIS.yellow = current_palette[3]
+            if len(current_palette) >= 5:
+                VIS.white = current_palette[4]
         state = {"pos":pos_now,"dur":dur_now,"bass_env":bass_env,"flash":flash,"bands":bands,"fps":clock.get_fps(),"bars":bars_state,"voice_env":voice_env}
         draw_visuals(screen, vis_surf, state)
         st_view = v_states[v_mode]
