@@ -50,13 +50,13 @@ class VisualCfg:
     progress_width: int = 14
     bar_thickness: int = 8
     bar_max_len_frac: float = 0.26
-    ring_radius_frac: float = 0.30
-    glow_color: Tuple[int,int,int]=(255,60,0)
+    ring_radius_frac: float = 0.18
+    glow_color: Tuple[int,int,int]=(255,50,0)
     bar_color: Tuple[int,int,int]=(255,80,0)
     white: Tuple[int,int,int]=(255,255,255)
     red: Tuple[int,int,int]=(255,32,32)
     yellow: Tuple[int,int,int]=(255,220,0)
-    text_dim: Tuple[int,int,int]=(255,220,0)
+    text_dim: Tuple[int,int,int]=(230,230,230)
     bg_color: Tuple[int,int,int]=(8,8,8)
     title_font_size: int = 18
     voice_base_color: Tuple[int,int,int]=(255,80,40)
@@ -483,7 +483,8 @@ def draw_visuals(screen, vis_surf, state):
         angle = angles[i]
         idx = int((i / n_points) * VIS.n_bands) % VIS.n_bands
         base_r = radius * 0.4
-        r = base_r * (1 + 0.8 * state["bass_env"] + 0.5 * state["bands"][idx] + jitter * (random.random() - 0.5))
+        # >>> ZMENA: Odstránené ohraničenie, Flubber môže voľne pretekať <<<
+        r = base_r * (1 + 1.5 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][idx] + jitter * (random.random() - 0.5))
         x = cx + r * np.cos(angle)
         y = cy + r * np.sin(angle)
         points.append((int(x), int(y)))
@@ -514,36 +515,11 @@ def draw_visuals(screen, vis_surf, state):
     frac = 0.0 if state["dur"] <= 0 else min(1.0, state["pos"] / state["dur"])
     energy_t = min(1.0, state["bass_env"] ** 0.5)
     energy_color = lerp_color(lerp_color(VIS.red, VIS.yellow, energy_t), VIS.white, energy_t * 0.5)
-    draw_progress_arc_aa(vis_surf, rect, -math.pi / 2, frac, VIS.yellow, VIS.progress_width)
+    draw_progress_arc_aa(vis_surf, rect, -math.pi / 2, frac, energy_color, VIS.progress_width)
     if state["flash"] > 0:
-        halo = build_glow_circle_surface(radius + 8, glow=24, color_rgb=VIS.yellow, thickness=3)
+        halo = build_glow_circle_surface(radius + 8, glow=36, color_rgb=energy_color, thickness=3)
         halo.set_alpha(int(255 * state["flash"]))
         blit_center(vis_surf, halo, (cx, cy))
-    inner_radius = int(radius * 0.7)
-    inner_r = inner_radius * (0.8 + 0.2 * (1 - (state["bass_env"] * 0.7 + state["voice_env"] * 0.3)))
-    inner_r = max(inner_r, radius * 0.5)
-    inner_points = []
-    for i in range(n_points):
-        angle = angles[i]
-        idx = int((i / n_points) * VIS.n_bands) % VIS.n_bands
-        r = inner_r * (1 + 0.3 * state["bands"][idx] + 0.1 * random.random())
-        x = cx + r * np.cos(angle)
-        y = cy + r * np.sin(angle)
-        inner_points.append((int(x), int(y)))
-    ctrl_inner = []
-    for i in range(len(inner_points)):
-        p0 = inner_points[(i - 1) % len(inner_points)]
-        p1 = inner_points[i]
-        p2 = inner_points[(i + 1) % len(inner_points)]
-        p3 = inner_points[(i + 2) % len(inner_points)]
-        ctrl_inner.append(catmull_rom(p0, p1, p2, p3, 0.5))
-    inner_color = lerp_color((255, 60, 0), (255, 32, 32), state["bass_env"] * 0.7 + state["voice_env"] * 0.3)
-    gfxdraw.filled_polygon(vis_surf, ctrl_inner, inner_color)
-    gfxdraw.aapolygon(vis_surf, ctrl_inner, (255, 60, 0))
-    outer_glow = build_glow_circle_surface(radius, glow=15, color_rgb=(255, 80, 0), thickness=3)
-    blit_center(vis_surf, outer_glow, (cx, cy))
-    inner_glow = build_glow_circle_surface(inner_r, glow=12, color_rgb=(255, 60, 0), thickness=2)
-    blit_center(vis_surf, inner_glow, (cx, cy))
 def main():
     args = parse_args()
     webterm_handler = WebTermHandler() if args.webterm else None
@@ -969,16 +945,11 @@ def main():
                 else:
                     bass_energy = 0.0
                 vb = mag_full * voice_mask_f
-                if vb.size:
-                    thresh_v = np.median(vb) * 0.4
-                    vb_clean = vb[vb > thresh_v]
-                    voice_energy = float(np.sqrt(np.mean(vb_clean*vb_clean))) if vb_clean.size else 0.0
-                else:
-                    voice_energy = 0.0
+                voice_energy = float(np.sqrt(np.mean(vb*vb))) if vb.size else 0.0
                 with fft_lock:
                     fft_last_bands[:] = bands
                     fft_last_bass_energy = bass_energy * 1.5
-                    fft_last_voice_energy = voice_energy * 2.0
+                    fft_last_voice_energy = voice_energy
             except Exception as e:
                 t = time.time()
                 base = 0.12 + 0.06*math.sin(t*2.0)
@@ -1134,6 +1105,14 @@ def main():
                             pos_ms = pygame.mixer.music.get_pos()
                             if pos_ms is not None and pos_ms >= 0:
                                 set_play_start(pos_ms / 1000.0)
+                        with fft_lock:
+                            bass_peak_val = max(bass_peak*0.995, fft_last_bass_energy)
+                            bass_norm_val = fft_last_bass_energy / (bass_peak_val + 1e-9)
+                            bass_env = bass_norm_val
+                            voice_peak_val = max(voice_peak * AUDIO.voice_peak_decay, fft_last_voice_energy)
+                            voice_norm_val = fft_last_voice_energy / (voice_peak_val + 1e-9)
+                            voice_env = voice_norm_val
+                        reset_text_caches()
                         log.debug("Playback resumed")
                     else:
                         if playback_mode == "music":
@@ -1142,7 +1121,9 @@ def main():
                             pygame.mixer.pause()
                         paused=True
                         if pause_started is None: pause_started = time.monotonic()
-                        log.debug("Playback paused (state frozen)")
+                        bass_env = 0.0; bass_peak = 1e-6; hist_idx = 0; hist_filled = 0; bass_hist.fill(0)
+                        ema = 0.0; mad_ema = 0.0
+                        log.debug("Playback paused")
                 elif ev.key in (pygame.K_n, pygame.K_p):
                     if end_of_queue_reached and ev.key == pygame.K_p:
                         target_idx = len(order) - 1
