@@ -478,16 +478,46 @@ def draw_visuals(screen, vis_surf, state):
     n_points = 32
     angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
     points = []
-    jitter = 0.05
+
+    # >>> ZMENA: Amorfný, organický Flubber <<<
+    # Použijeme aktuálny čas pre náhodné, ale plynulé pohyby
+    time_offset = time.time() * 2.0
+
     for i in range(n_points):
         angle = angles[i]
+        # Získame index pásma pre tento bod
         idx = int((i / n_points) * VIS.n_bands) % VIS.n_bands
-        base_r = radius * 0.4
-        # >>> ZMENA: Odstránené ohraničenie, Flubber môže voľne pretekať <<<
-        r = base_r * (1 + 1.5 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][idx] + jitter * (random.random() - 0.5))
+
+        # Základný polomer (menší, ako bol predtým)
+        base_r = radius * 0.35
+
+        # 1. Bázový puls z basov a hlasu
+        pulse = 0.4 * state["bass_env"] + 0.3 * state["voice_env"]
+
+        # 2. Dynamický faktor z FFT pásma pre tento konkrétny bod
+        fft_factor = 0.3 * state["bands"][idx]
+
+        # 3. Náhodný, ale plynulý "dýchanie" efekt pre celý objekt
+        breathe = 0.1 * math.sin(time_offset * 0.7 + i * 0.1)
+
+        # 4. Silný, náhodný "škubanie" efekt, ktorý sa zosilňuje pri basoch
+        jitter = 0.2 * state["bass_env"] * (random.random() - 0.5)
+
+        # 5. Veľmi pomalá, globálna zmena tvaru
+        morph = 0.1 * math.sin(time_offset * 0.1)
+
+        # Kombinujeme všetky efekty
+        r = base_r * (1.0 + pulse + fft_factor + breathe + jitter + morph)
+
+        # Umožníme presahovať za kruh pri silných basoch alebo hlase
+        if state["bass_env"] > 0.7 or state["voice_env"] > 0.7:
+            r *= (1.0 + 0.5 * max(state["bass_env"], state["voice_env"]))
+
+        # Vypočítame konečnú pozíciu bodu
         x = cx + r * np.cos(angle)
         y = cy + r * np.sin(angle)
         points.append((int(x), int(y)))
+
     def catmull_rom(p0, p1, p2, p3, t):
         return (
             0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t**2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t**3),
