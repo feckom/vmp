@@ -79,7 +79,7 @@ mkdir backgrounds
 python vmp.py --debug --music-dir "music" --backgrounds "backgrounds"
 
 ## Usage
-
+```bat
 --music-dir PATH        Path to your music library (recursively scanned).
 --backgrounds PATH      Optional backgrounds folder (.jpg/.jpeg/.png).
 --debug                 Verbose logs + rotating log file at logs/player.log.
@@ -91,9 +91,10 @@ python vmp.py --debug --music-dir "music" --backgrounds "backgrounds"
 --ignore DIR,DIR,...    Ignore directory names during scan (case-insensitive).
 --no-tags               Ignore ID3 tags; guess title/artist from filenames.
 --webterm               Start WebSocket terminal at ws://localhost:3030.
-
+```
 Controls
 
+```bat
 View & window
 
 H help overlay
@@ -125,6 +126,7 @@ R repeat-all toggle
 ← / → seek −5s / +5s (precise seek via FFmpeg segment)
 
 Esc or Q quit
+```
 
 ## How It Works
 
