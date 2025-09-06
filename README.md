@@ -1,4 +1,4 @@
-# VMP — Cyberpunk Circular Music Player (Python)
+# VMP — Visualized Music Player (Python)
 
 A fast, single-file music player with a neon/cyberpunk circular visualizer, precise FFmpeg-based seeking, smooth cosine crossfades, and a lightweight web terminal for remote key controls.
 
