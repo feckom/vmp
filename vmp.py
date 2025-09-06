@@ -45,15 +45,15 @@ class VisualCfg:
     fft_size: int = 2048
     bass_fft: int = 1024
     n_bands: int = 64
-    fft_every_n_frames: int = 1  # Update every frame
+    fft_every_n_frames: int = 1  # Update every frame for smoother visuals
     ui_alpha: int = 153  # ~60% transparency
     dotted_count: int = 96
     progress_width: int = 14
     bar_thickness: int = 8  # Hrubšie lúče
     bar_max_len_frac: float = 0.26
-    ring_radius_frac: float = 0.20
-    glow_color: Tuple[int,int,int]=(255,40,0)
-    bar_color: Tuple[int,int,int]=(255,64,0)
+    ring_radius_frac: float = 0.30
+    glow_color: Tuple[int,int,int]=(255,50,0)
+    bar_color: Tuple[int,int,int]=(255,80,0)
     white: Tuple[int,int,int]=(255,255,255)
     red: Tuple[int,int,int]=(255,32,32)
     yellow: Tuple[int,int,int]=(255,220,0)
@@ -65,7 +65,7 @@ class VisualCfg:
     voice_base_radius_scale: float = 0.62
     voice_max_pulse_px: int = 18
     voice_alpha_min: int = 40
-    voice_alpha_max: int = 200
+    voice_alpha_max: int = 220  # Menej priehľadný!
 @dataclass
 class UiCfg:
     next_cooldown_sec: float = 0.35
@@ -478,50 +478,90 @@ COS_ARR = np.cos(2*np.pi*np.arange(VIS.n_bands)/VIS.n_bands - np.pi/2.0).astype(
 SIN_ARR = np.sin(2*np.pi*np.arange(VIS.n_bands)/VIS.n_bands - np.pi/2.0).astype(np.float32)
 # ---------------- Visualization ----------------
 def draw_visuals(screen, vis_surf, state):
-    w,h = screen.get_size()
-    cx,cy = w//2, h//2
-    radius = int(min(w,h)*VIS.ring_radius_frac)
-    max_bar = int(min(w,h)*VIS.bar_max_len_frac)
+    w, h = screen.get_size()
+    cx, cy = w // 2, h // 2
+    radius = int(min(w, h) * VIS.ring_radius_frac)
+    max_bar = int(min(w, h) * VIS.bar_max_len_frac)
+
+    # Ensure bars geometry is initialized
     if state["bars"]["radius"] != radius:
-        x0 = (cx + (radius+4)*COS_ARR).astype(np.int32)
-        y0 = (cy + (radius+4)*SIN_ARR).astype(np.int32)
-        state["bars"].update({"radius":radius,"x0":x0,"y0":y0})
+        x0 = (cx + (radius + 4) * COS_ARR).astype(np.int32)
+        y0 = (cy + (radius + 4) * SIN_ARR).astype(np.int32)
+        state["bars"].update({"radius": radius, "x0": x0, "y0": y0})
         log.debug("Bars layout updated (radius=%d)", radius)
-    dotted = build_dotted_ring_surface(radius, VIS.dotted_count, VIS.bar_color)
-    blit_center(vis_surf, dotted, (cx,cy))
-    glow1 = build_glow_circle_surface(radius, glow=8, color_rgb=VIS.glow_color, thickness=2)
-    blit_center(vis_surf, glow1, (cx,cy))
-    bass_pulse = min(1.0, state["bass_env"] * 4.0)
-    pulse_color = lerp_color((30,30,30), VIS.bar_color, bass_pulse)
-    glow2 = build_glow_circle_surface(int(radius*0.7), glow=6, color_rgb=pulse_color, thickness=0)
-    glow2.set_alpha(int(40 + 180*bass_pulse))
-    blit_center(vis_surf, glow2, (cx,cy))
-    ve = max(0.0, min(1.0, state.get("voice_env", 0.0)))
-    base_r = int(radius * 0.4)  # Menší začiatok
-    dyn_r  = base_r + int(ve * VIS.voice_max_pulse_px) + int(state["bass_env"] * radius * 0.5)  # Rozšírenie mimo kruh
-    alpha  = int(lerp(VIS.voice_alpha_min, VIS.voice_alpha_max, ve))
-    col    = lerp_color(VIS.voice_base_color, VIS.voice_peak_color, ve)
-    gfxdraw.filled_circle(vis_surf, cx, cy, dyn_r, (*col, alpha))
-    gfxdraw.aacircle(vis_surf, cx, cy, dyn_r, (*col, min(255, alpha+30)))
-    pad=VIS.progress_width//2+8
-    rect=pygame.Rect(cx-radius-pad, cy-radius-pad, 2*(radius+pad), 2*(radius+pad))
-    frac = 0.0 if state["dur"]<=0 else min(1.0, state["pos"]/state["dur"])
-    energy_t = min(1.0, state["bass_env"]**0.5)
-    energy_color = lerp_color(lerp_color(VIS.red, VIS.yellow, energy_t), VIS.white, energy_t*0.5)
-    draw_progress_arc_aa(vis_surf, rect, -math.pi/2, frac, energy_color, VIS.progress_width)
-    if state["flash"] > 0:
-        halo = build_glow_circle_surface(radius+8, glow=36, color_rgb=energy_color, thickness=3)
-        halo.set_alpha(int(255*state["flash"]))
-        blit_center(vis_surf, halo, (cx,cy))
-    x0_arr, y0_arr = state["bars"]["x0"], state["bars"]["y0"]
+    else:
+        x0 = state["bars"]["x0"]
+        y0 = state["bars"]["y0"]
+
+    # --- Outer Ring: FFT Bars ---
     step = 1 if state["fps"] >= 30 else 2
-    bands = state["bands"]
     for i in range(0, VIS.n_bands, step):
-        v = bands[i]
-        L=int(6 + v*max_bar)
-        x1=int(x0_arr[i] + L*COS_ARR[i])
-        y1=int(y0_arr[i] + L*SIN_ARR[i])
-        pygame.draw.line(vis_surf, (*VIS.bar_color,255), (x0_arr[i],y0_arr[i]), (x1,y1), width=VIS.bar_thickness)
+        v = state["bands"][i]
+        L = int(6 + v * max_bar)
+        x1 = int(x0[i] + L * COS_ARR[i])
+        y1 = int(y0[i] + L * SIN_ARR[i])
+        pygame.draw.line(vis_surf, (*VIS.bar_color, 255), (x0[i], y0[i]), (x1, y1), width=VIS.bar_thickness)
+
+    # --- Inner Ring: Ferrofluid-like Shape ---
+    n_points = 32
+    angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
+    points = []
+    jitter = 0.05  # Add organic jitter
+
+    for i in range(n_points):
+        angle = angles[i]
+        idx = int((i / n_points) * VIS.n_bands) % VIS.n_bands
+        base_r = radius * 0.4  # Start smaller
+        # Dynamic radius influenced by bass and band energy
+        r = base_r * (1 + 0.8 * state["bass_env"] + 0.5 * state["bands"][idx] + jitter * (random.random() - 0.5))
+        x = cx + r * np.cos(angle)
+        y = cy + r * np.sin(angle)
+        points.append((int(x), int(y)))
+
+    # Smooth the path using Catmull-Rom spline for organic, fluid motion
+    def catmull_rom(p0, p1, p2, p3, t):
+        return (
+            0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t**2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t**3),
+            0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t**2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t**3)
+        )
+
+    ctrl = []
+    for i in range(len(points)):
+        p0 = points[(i - 1) % len(points)]
+        p1 = points[i]
+        p2 = points[(i + 1) % len(points)]
+        p3 = points[(i + 2) % len(points)]
+        ctrl.append(catmull_rom(p0, p1, p2, p3, 0.5))
+
+    # Draw filled polygon with vibrant color and high opacity
+    glow_color = lerp_color((255, 50, 0), (255, 150, 0), state["bass_env"])
+    gfxdraw.filled_polygon(vis_surf, ctrl, glow_color)
+    gfxdraw.aapolygon(vis_surf, ctrl, (255, 100, 0))
+
+    # --- Glow Effect ---
+    glow1 = build_glow_circle_surface(radius, glow=10, color_rgb=glow_color, thickness=2)
+    blit_center(vis_surf, glow1, (cx, cy))
+
+    # --- Pulsing Bass Circle ---
+    pulse_rad = int(radius * 0.85 * (1 + 0.1 * state["bass_env"]))
+    pulse_col = lerp_color((255, 50, 0), (255, 150, 0), state["bass_env"])
+    pulse_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+    pygame.draw.circle(pulse_surf, (*pulse_col, 128), (cx, cy), pulse_rad)
+    vis_surf.blit(pulse_surf, (0, 0))
+
+    # --- Progress Arc ---
+    pad = VIS.progress_width // 2 + 8
+    rect = pygame.Rect(cx - radius - pad, cy - radius - pad, 2 * (radius + pad), 2 * (radius + pad))
+    frac = 0.0 if state["dur"] <= 0 else min(1.0, state["pos"] / state["dur"])
+    energy_t = min(1.0, state["bass_env"] ** 0.5)
+    energy_color = lerp_color(lerp_color(VIS.red, VIS.yellow, energy_t), VIS.white, energy_t * 0.5)
+    draw_progress_arc_aa(vis_surf, rect, -math.pi / 2, frac, energy_color, VIS.progress_width)
+
+    # --- Flash Halo ---
+    if state["flash"] > 0:
+        halo = build_glow_circle_surface(radius + 8, glow=36, color_rgb=energy_color, thickness=3)
+        halo.set_alpha(int(255 * state["flash"]))
+        blit_center(vis_surf, halo, (cx, cy))
 # ---------------- Main ----------------
 def main():
     args = parse_args()
@@ -972,12 +1012,22 @@ def main():
                 win_bass = make_fft_window(samples, sr, pos_an, VIS.bass_fft)
                 sp_b = np.fft.rfft(win_bass*hann_bass)
                 bb = np.abs(sp_b) * bass_mask_f
-                bass_energy = float(np.sqrt(np.mean(bb*bb))) if bb.size else 0.0
+                # --- ENHANCED BASS DETECTION ---
+                if bb.size > 0:
+                    # Apply adaptive threshold to remove noise
+                    thresh = np.median(bb) * 0.3
+                    bb_clean = bb[bb > thresh]
+                    if bb_clean.size > 0:
+                        bass_energy = float(np.sqrt(np.mean(bb_clean*bb_clean)))
+                    else:
+                        bass_energy = 0.0
+                else:
+                    bass_energy = 0.0
                 vb = mag_full * voice_mask_f
                 voice_energy = float(np.sqrt(np.mean(vb*vb))) if vb.size else 0.0
                 with fft_lock:
                     fft_last_bands[:] = bands  # Copy into existing array
-                    fft_last_bass_energy = bass_energy
+                    fft_last_bass_energy = bass_energy * 1.5  # Apply sensitivity boost
                     fft_last_voice_energy = voice_energy
             except Exception as e:
                 t = time.time()
@@ -1131,7 +1181,10 @@ def main():
                     except Exception: pass
                 elif ev.key == pygame.K_SPACE:
                     if paused:
-                        pygame.mixer.unpause()
+                        if playback_mode == "music":
+                            pygame.mixer.music.unpause()
+                        else:
+                            pygame.mixer.unpause()
                         paused=False
                         if pause_started is not None:
                             paused_accum += time.monotonic() - pause_started; pause_started=None
@@ -1151,7 +1204,10 @@ def main():
                         reset_text_caches()
                         log.debug("Playback resumed")
                     else:
-                        pygame.mixer.pause()  # pauses both music and channels
+                        if playback_mode == "music":
+                            pygame.mixer.music.pause()
+                        else:
+                            pygame.mixer.pause()
                         paused=True
                         if pause_started is None: pause_started = time.monotonic()
                         bass_env = 0.0; bass_peak = 1e-6; hist_idx = 0; hist_filled = 0; bass_hist.fill(0)
