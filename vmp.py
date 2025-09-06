@@ -45,11 +45,11 @@ class VisualCfg:
     fft_size: int = 2048
     bass_fft: int = 1024
     n_bands: int = 64
-    fft_every_n_frames: int = 2
+    fft_every_n_frames: int = 1  # Update every frame
     ui_alpha: int = 153  # ~60% transparency
     dotted_count: int = 96
     progress_width: int = 14
-    bar_thickness: int = 5
+    bar_thickness: int = 8  # Hrubšie lúče
     bar_max_len_frac: float = 0.26
     ring_radius_frac: float = 0.20
     glow_color: Tuple[int,int,int]=(255,40,0)
@@ -497,8 +497,8 @@ def draw_visuals(screen, vis_surf, state):
     glow2.set_alpha(int(40 + 180*bass_pulse))
     blit_center(vis_surf, glow2, (cx,cy))
     ve = max(0.0, min(1.0, state.get("voice_env", 0.0)))
-    base_r = int(radius * VIS.voice_base_radius_scale)
-    dyn_r  = base_r + int(ve * VIS.voice_max_pulse_px)
+    base_r = int(radius * 0.4)  # Menší začiatok
+    dyn_r  = base_r + int(ve * VIS.voice_max_pulse_px) + int(state["bass_env"] * radius * 0.5)  # Rozšírenie mimo kruh
     alpha  = int(lerp(VIS.voice_alpha_min, VIS.voice_alpha_max, ve))
     col    = lerp_color(VIS.voice_base_color, VIS.voice_peak_color, ve)
     gfxdraw.filled_circle(vis_surf, cx, cy, dyn_r, (*col, alpha))
@@ -800,15 +800,24 @@ def main():
         pause_started = None
         log.debug("Set play start: %.3f", start_sec)
     def get_play_pos() -> float:
+        # If paused, return last known position (do not advance time)
+        if paused:
+            if pause_started is not None:
+                # Return position at the moment pause was pressed
+                return max(0.0, pause_started - play_start_monotonic - paused_accum)
+            else:
+                # Fallback: use monotonic if somehow pause_started is None
+                now = time.monotonic()
+                extra = (now - pause_started) if pause_started is not None else 0.0
+                return max(0.0, now - play_start_monotonic - (paused_accum + extra))
         # Prefer mixer.music.get_pos when in 'music' mode & valid
         if playback_mode == "music":
             pos_ms = pygame.mixer.music.get_pos()
             if pos_ms is not None and pos_ms >= 0:
-                return pos_ms/1000.0
+                return pos_ms / 1000.0
         # Generic monotonic fallback (also for 'channel' mode)
         now = time.monotonic()
-        extra = (now - pause_started) if (paused and pause_started is not None) else 0.0
-        return max(0.0, now - play_start_monotonic - (paused_accum + extra))
+        return max(0.0, now - play_start_monotonic - paused_accum)
     def seek_relative(delta_sec: float):
         """Use precise seek via ffmpeg segment on Channel(0)."""
         cur = get_play_pos()
@@ -1126,6 +1135,11 @@ def main():
                         paused=False
                         if pause_started is not None:
                             paused_accum += time.monotonic() - pause_started; pause_started=None
+                        # Force sync visual position with actual playback
+                        if playback_mode == "music":
+                            pos_ms = pygame.mixer.music.get_pos()
+                            if pos_ms is not None and pos_ms >= 0:
+                                set_play_start(pos_ms / 1000.0)
                         # >>> SET ENVELOPES TO CURRENT FFT VALUES FOR SMOOTHER RESUME <<<
                         with fft_lock:
                             bass_peak_val = max(bass_peak*0.995, fft_last_bass_energy)
