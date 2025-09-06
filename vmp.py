@@ -19,7 +19,6 @@ from mutagen import File as MutaFile
 from mutagen.easyid3 import EasyID3
 from pydub import AudioSegment
 from concurrent.futures import ThreadPoolExecutor
-# ---------------- Config ----------------
 @dataclass
 class AudioCfg:
     target_sr: int = 44100
@@ -45,19 +44,19 @@ class VisualCfg:
     fft_size: int = 2048
     bass_fft: int = 1024
     n_bands: int = 64
-    fft_every_n_frames: int = 1  # Update every frame for smoother visuals
-    ui_alpha: int = 153  # ~60% transparency
+    fft_every_n_frames: int = 1
+    ui_alpha: int = 153
     dotted_count: int = 96
     progress_width: int = 14
-    bar_thickness: int = 8  # Hrubšie lúče
+    bar_thickness: int = 8
     bar_max_len_frac: float = 0.26
     ring_radius_frac: float = 0.30
-    glow_color: Tuple[int,int,int]=(255,50,0)
+    glow_color: Tuple[int,int,int]=(255,60,0)
     bar_color: Tuple[int,int,int]=(255,80,0)
     white: Tuple[int,int,int]=(255,255,255)
     red: Tuple[int,int,int]=(255,32,32)
     yellow: Tuple[int,int,int]=(255,220,0)
-    text_dim: Tuple[int,int,int]=(230,230,230)
+    text_dim: Tuple[int,int,int]=(255,220,0)
     bg_color: Tuple[int,int,int]=(8,8,8)
     title_font_size: int = 18
     voice_base_color: Tuple[int,int,int]=(255,80,40)
@@ -65,7 +64,7 @@ class VisualCfg:
     voice_base_radius_scale: float = 0.62
     voice_max_pulse_px: int = 18
     voice_alpha_min: int = 40
-    voice_alpha_max: int = 220  # Menej priehľadný!
+    voice_alpha_max: int = 220
 @dataclass
 class UiCfg:
     next_cooldown_sec: float = 0.35
@@ -80,9 +79,7 @@ BG_DIR    = ""
 SCAN_EXTS = (".mp3", ".wav", ".flac", ".ogg", ".m4a")
 FONT_PATH  = Path(__file__).with_name("cyberpunk.ttf")
 log = logging.getLogger("vmp")
-# ---------------- Logging ----------------
 class WebTermHandler(logging.Handler):
-    """Custom log handler that sends messages to the web terminal."""
     def __init__(self):
         super().__init__()
         self.clients = set()
@@ -125,7 +122,6 @@ def setup_logging(debug=False, webterm_handler=None):
     logging.getLogger().setLevel(logging.WARNING)
     lg.debug("Logging initialized. Debug=%s", debug)
     return lg
-# ---------------- FFmpeg ----------------
 def ensure_ffmpeg():
     if shutil.which("ffmpeg") is None:
         log.critical("FFmpeg not found in PATH.")
@@ -137,7 +133,6 @@ def ensure_ffmpeg():
     except Exception as e:
         log.critical("FFmpeg probe failed: %s", e)
         return False
-# ---------------- Utils ----------------
 def format_time(sec: float) -> str:
     sec = max(0, int(sec)); m, s = divmod(sec, 60); return f"{m:02d}:{s:02d}"
 _CLEAN_PAT   = re.compile(r"(?i)\b(official\s*video|lyrics?|audio|hd|hq|remaster(?:ed)?|live|clip|mv|visualizer|topic|karaoke|instrumental|mono|stereo|remix|mix|edit|radio\s*edit|feat\.?.+|ft\.?.+)\b")
@@ -164,13 +159,11 @@ def guess_from_filename(path: Path) -> Tuple[Optional[str], Optional[str]]:
         parent = _MULTI_SPACE.sub(" ", _BRACKETS.sub(" ", path.parent.name.replace("_"," "))).strip()
         if parent and parent.lower() not in ("music","mp3","tracks","songs"): artist = _smart_titlecase(parent)
     return (title or None, artist or None)
-# ---------------- Cache Key Normalize ----------------
 def _norm_key(path: Path | str) -> str:
     try:
         return str(Path(path).resolve()).lower()
     except Exception:
         return str(path).replace("\\", "/").lower()
-# ---------------- Track / Library ----------------
 class Track:
     def __init__(self, path: Path, no_tags: bool=False):
         self.path = path
@@ -202,7 +195,6 @@ class Track:
             if mf and mf.info and getattr(mf.info,"length",None): return float(mf.info.length)
         except Exception: pass
         return 0.0
-# LRU cache for analyzed mono samples
 class AnalysisCache:
     def __init__(self, capacity:int=64):
         self.cap = capacity
@@ -244,7 +236,6 @@ class Library:
                 log.warning("Scan skip (path issue) %s: %s", p, e)
         self.tracks.sort(key=lambda t: str(t.path).lower())
         log.info("Scan complete: %d tracks", len(self.tracks))
-# ---------------- DSP (EQ/Limiter) ----------------
 def biquad_low_shelf(f0, sr, gain_db, S=1.0):
     A = 10**(gain_db/40); w0=2*math.pi*f0/sr; alpha=math.sin(w0)/2*math.sqrt((A+1/A)*(1/S-1)+2)
     cosw=math.cos(w0)
@@ -293,7 +284,6 @@ def apply_eq_limiter_stereo(buf: np.ndarray, sr: int, eq_db: dict, softclip=True
     if softclip:
         buf = np.tanh(2.2*buf) / np.tanh(2.2)
     return np.clip(buf, -0.999, 0.999)
-# ---------------- Decode helpers ----------------
 def decode_pcm_segment(path: Path, start_sec: float, dur_sec: float, sr=AUDIO.target_sr) -> np.ndarray:
     ss = max(0.0, start_sec)
     cmd = ["ffmpeg","-hide_banner","-loglevel","error","-ss", f"{ss:.3f}","-t", f"{float(dur_sec):.3f}",
@@ -318,7 +308,6 @@ def numpy_to_sound(arr_float_stereo: np.ndarray) -> pygame.mixer.Sound:
     arr = np.clip(arr_float_stereo, -1.0, 1.0)
     arr16 = (arr * 32767.0).astype(np.int16)
     return pygame.sndarray.make_sound(arr16)
-# ---------------- FFT Window & Mapping ----------------
 _hann_cache: Dict[int, np.ndarray] = {}
 def _hann(size: int) -> np.ndarray:
     h = _hann_cache.get(size)
@@ -327,7 +316,6 @@ def _hann(size: int) -> np.ndarray:
         h = np.hanning(size).astype(np.float32)
         _hann_cache[size] = h
     return h
-# Reusable window buffers to avoid allocations
 _fft_window_cache: Dict[int, np.ndarray] = {}
 def make_fft_window(samples, sr, pos_sec, size=VIS.fft_size):
     key = size
@@ -350,7 +338,6 @@ def make_fft_window(samples, sr, pos_sec, size=VIS.fft_size):
         window.fill(0.0)
     return window
 class BandMapper:
-    """Log-spaced bands with precomputed index slices and vectorized RMS."""
     def __init__(self, n_time: int, sr: int, n_bands: int):
         self.sr = sr
         self.n_bands = n_bands
@@ -367,13 +354,10 @@ class BandMapper:
         self.idxs = idxs
         self.band_weights = np.linspace(1.15, 0.85, n_bands).astype(np.float32)
     def map(self, spectrum_abs: np.ndarray) -> np.ndarray:
-        # Pre-allocate result array
         all_indices = np.concatenate(self.idxs)
         all_values = spectrum_abs[all_indices]
-        # Calculate start and end indices for each band
         lens = np.array([len(idx) for idx in self.idxs])
-        split_points = np.cumsum(lens[:-1])  # Points to split the concatenated array
-        # Split and calculate RMS for each band
+        split_points = np.cumsum(lens[:-1])
         band_rms = np.array([
             np.sqrt(np.mean(chunk * chunk)) if len(chunk) > 0 else 0.0
             for chunk in np.split(all_values, split_points)
@@ -383,7 +367,6 @@ class BandMapper:
             band_rms /= vmax
         band_rms *= self.band_weights
         return np.clip(band_rms, 0.0, 1.0)
-# ---------------- Surfaces Cache ----------------
 _cached_dotted: Dict[int, pygame.Surface] = {}
 _cached_glow: Dict[Tuple[int,int,Tuple[int,int,int],int], pygame.Surface] = {}
 def build_dotted_ring_surface(radius: int, count: int, color_rgb: Tuple[int,int,int]) -> pygame.Surface:
@@ -411,7 +394,6 @@ def build_glow_circle_surface(radius:int, glow:int, color_rgb:Tuple[int,int,int]
         col=(r,g,b, min(255,alpha))
         pygame.draw.circle(surf, col, center, radius+i, width=thickness)
     _cached_glow[key]=surf
-    # intentionally no debug log here (to reduce spam)
     return surf
 def blit_center(dst: pygame.Surface, src: pygame.Surface, pos: Tuple[int,int]):
     dst.blit(src, src.get_rect(center=pos))
@@ -430,7 +412,6 @@ def load_system(size:int, bold=True):
 def load_cyber(size:int):
     try: return pygame.font.Font(str(FONT_PATH), size)
     except Exception: return load_system(size, bold=True)
-# ---------------- CLI ----------------
 def parse_args():
     ap = argparse.ArgumentParser(description="Cyberpunk circular music player (optimized)")
     ap.add_argument("--music-dir", default=MUSIC_DIR)
@@ -445,7 +426,6 @@ def parse_args():
     ap.add_argument("--no-tags", action="store_true")
     ap.add_argument("--webterm", action="store_true", help="Start web terminal on port 3030")
     return ap.parse_args()
-# ---------------- Win helpers ----------------
 def win_toggle_topmost():
     if platform.system() != "Windows": return
     try:
@@ -473,17 +453,13 @@ def get_desktop_size() -> Tuple[int,int]:
         return (max(640, int(info.current_w)), max(480, int(info.current_h)))
     except Exception:
         return (1920,1080)
-# ---------------- Precomputes ----------------
 COS_ARR = np.cos(2*np.pi*np.arange(VIS.n_bands)/VIS.n_bands - np.pi/2.0).astype(np.float32)
 SIN_ARR = np.sin(2*np.pi*np.arange(VIS.n_bands)/VIS.n_bands - np.pi/2.0).astype(np.float32)
-# ---------------- Visualization ----------------
 def draw_visuals(screen, vis_surf, state):
     w, h = screen.get_size()
     cx, cy = w // 2, h // 2
     radius = int(min(w, h) * VIS.ring_radius_frac)
     max_bar = int(min(w, h) * VIS.bar_max_len_frac)
-
-    # Ensure bars geometry is initialized
     if state["bars"]["radius"] != radius:
         x0 = (cx + (radius + 4) * COS_ARR).astype(np.int32)
         y0 = (cy + (radius + 4) * SIN_ARR).astype(np.int32)
@@ -492,8 +468,6 @@ def draw_visuals(screen, vis_surf, state):
     else:
         x0 = state["bars"]["x0"]
         y0 = state["bars"]["y0"]
-
-    # --- Outer Ring: FFT Bars ---
     step = 1 if state["fps"] >= 30 else 2
     for i in range(0, VIS.n_bands, step):
         v = state["bands"][i]
@@ -501,30 +475,23 @@ def draw_visuals(screen, vis_surf, state):
         x1 = int(x0[i] + L * COS_ARR[i])
         y1 = int(y0[i] + L * SIN_ARR[i])
         pygame.draw.line(vis_surf, (*VIS.bar_color, 255), (x0[i], y0[i]), (x1, y1), width=VIS.bar_thickness)
-
-    # --- Inner Ring: Ferrofluid-like Shape ---
     n_points = 32
     angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
     points = []
-    jitter = 0.05  # Add organic jitter
-
+    jitter = 0.05
     for i in range(n_points):
         angle = angles[i]
         idx = int((i / n_points) * VIS.n_bands) % VIS.n_bands
-        base_r = radius * 0.4  # Start smaller
-        # Dynamic radius influenced by bass and band energy
+        base_r = radius * 0.4
         r = base_r * (1 + 0.8 * state["bass_env"] + 0.5 * state["bands"][idx] + jitter * (random.random() - 0.5))
         x = cx + r * np.cos(angle)
         y = cy + r * np.sin(angle)
         points.append((int(x), int(y)))
-
-    # Smooth the path using Catmull-Rom spline for organic, fluid motion
     def catmull_rom(p0, p1, p2, p3, t):
         return (
             0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t**2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t**3),
             0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t**2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t**3)
         )
-
     ctrl = []
     for i in range(len(points)):
         p0 = points[(i - 1) % len(points)]
@@ -532,40 +499,53 @@ def draw_visuals(screen, vis_surf, state):
         p2 = points[(i + 1) % len(points)]
         p3 = points[(i + 2) % len(points)]
         ctrl.append(catmull_rom(p0, p1, p2, p3, 0.5))
-
-    # Draw filled polygon with vibrant color and high opacity
     glow_color = lerp_color((255, 50, 0), (255, 150, 0), state["bass_env"])
     gfxdraw.filled_polygon(vis_surf, ctrl, glow_color)
     gfxdraw.aapolygon(vis_surf, ctrl, (255, 100, 0))
-
-    # --- Glow Effect ---
     glow1 = build_glow_circle_surface(radius, glow=10, color_rgb=glow_color, thickness=2)
     blit_center(vis_surf, glow1, (cx, cy))
-
-    # --- Pulsing Bass Circle ---
     pulse_rad = int(radius * 0.85 * (1 + 0.1 * state["bass_env"]))
     pulse_col = lerp_color((255, 50, 0), (255, 150, 0), state["bass_env"])
     pulse_surf = pygame.Surface((w, h), pygame.SRCALPHA)
     pygame.draw.circle(pulse_surf, (*pulse_col, 128), (cx, cy), pulse_rad)
     vis_surf.blit(pulse_surf, (0, 0))
-
-    # --- Progress Arc ---
     pad = VIS.progress_width // 2 + 8
     rect = pygame.Rect(cx - radius - pad, cy - radius - pad, 2 * (radius + pad), 2 * (radius + pad))
     frac = 0.0 if state["dur"] <= 0 else min(1.0, state["pos"] / state["dur"])
     energy_t = min(1.0, state["bass_env"] ** 0.5)
     energy_color = lerp_color(lerp_color(VIS.red, VIS.yellow, energy_t), VIS.white, energy_t * 0.5)
-    draw_progress_arc_aa(vis_surf, rect, -math.pi / 2, frac, energy_color, VIS.progress_width)
-
-    # --- Flash Halo ---
+    draw_progress_arc_aa(vis_surf, rect, -math.pi / 2, frac, VIS.yellow, VIS.progress_width)
     if state["flash"] > 0:
-        halo = build_glow_circle_surface(radius + 8, glow=36, color_rgb=energy_color, thickness=3)
+        halo = build_glow_circle_surface(radius + 8, glow=24, color_rgb=VIS.yellow, thickness=3)
         halo.set_alpha(int(255 * state["flash"]))
         blit_center(vis_surf, halo, (cx, cy))
-# ---------------- Main ----------------
+    inner_radius = int(radius * 0.7)
+    inner_r = inner_radius * (0.8 + 0.2 * (1 - (state["bass_env"] * 0.7 + state["voice_env"] * 0.3)))
+    inner_r = max(inner_r, radius * 0.5)
+    inner_points = []
+    for i in range(n_points):
+        angle = angles[i]
+        idx = int((i / n_points) * VIS.n_bands) % VIS.n_bands
+        r = inner_r * (1 + 0.3 * state["bands"][idx] + 0.1 * random.random())
+        x = cx + r * np.cos(angle)
+        y = cy + r * np.sin(angle)
+        inner_points.append((int(x), int(y)))
+    ctrl_inner = []
+    for i in range(len(inner_points)):
+        p0 = inner_points[(i - 1) % len(inner_points)]
+        p1 = inner_points[i]
+        p2 = inner_points[(i + 1) % len(inner_points)]
+        p3 = inner_points[(i + 2) % len(inner_points)]
+        ctrl_inner.append(catmull_rom(p0, p1, p2, p3, 0.5))
+    inner_color = lerp_color((255, 60, 0), (255, 32, 32), state["bass_env"] * 0.7 + state["voice_env"] * 0.3)
+    gfxdraw.filled_polygon(vis_surf, ctrl_inner, inner_color)
+    gfxdraw.aapolygon(vis_surf, ctrl_inner, (255, 60, 0))
+    outer_glow = build_glow_circle_surface(radius, glow=15, color_rgb=(255, 80, 0), thickness=3)
+    blit_center(vis_surf, outer_glow, (cx, cy))
+    inner_glow = build_glow_circle_surface(inner_r, glow=12, color_rgb=(255, 60, 0), thickness=2)
+    blit_center(vis_surf, inner_glow, (cx, cy))
 def main():
     args = parse_args()
-    # Initialize web terminal handler if requested
     webterm_handler = WebTermHandler() if args.webterm else None
     setup_logging(args.debug, webterm_handler)
     ffok = ensure_ffmpeg()
@@ -576,14 +556,12 @@ def main():
         except Exception: return None
     screen = try_mode((1280,720), flags_windowed, 1) or try_mode((1280,720), flags_windowed, 0) or pygame.display.set_mode((1280,720))
     pygame.display.set_caption("VMP – Cyberpunk Ring Player (Optimized)")
-    # playback: we will use pygame.mixer.music for normal playback,
-    # Channel(0) (chan_main) for precise seek segments, Channel(1) (chan_overlap) for overlap next
     pygame.mixer.init(frequency=AUDIO.target_sr, channels=2, size=-16, buffer=1024)
     log.debug("Pygame mixer initialized @ %d Hz", AUDIO.target_sr)
     chan_main = pygame.mixer.Channel(0)
     chan_overlap = pygame.mixer.Channel(1)
-    playback_mode = "music"  # "music" or "channel"
-    current_main_sound: Optional[pygame.mixer.Sound] = None  # when mode == "channel"
+    playback_mode = "music"
+    current_main_sound: Optional[pygame.mixer.Sound] = None
     fake_fullscreen = False
     prev_window_pos = (100, 100)
     prev_window_size = (1280, 720)
@@ -600,17 +578,15 @@ def main():
             if 0 <= idx < len(sizes): return sizes[idx]
         except Exception: pass
         return get_desktop_size()
-    # surfaces that depend on size
     vis_surf  = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
     text_surf = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
     def after_mode_change_rescale():
-        """Force-rescale visuals & caches after fake-fullscreen toggle or resize."""
         nonlocal vis_surf, text_surf
         w,h = screen.get_size()
         vis_surf  = pygame.Surface((w,h), pygame.SRCALPHA)
         text_surf = pygame.Surface((w,h), pygame.SRCALPHA)
         rescale_background_for_size() if original_bg_surface is not None else choose_background(True)
-        bars_state["radius"] = None  # force recompute ring geometry
+        bars_state["radius"] = None
         reset_text_caches()
         log.debug("Rescaled after mode change -> %dx%d", w, h)
     def enter_fake_fullscreen():
@@ -649,7 +625,6 @@ def main():
     lib = Library(ext_tuple, ignore_dirs, args.no_tags); lib.scan(base)
     if not lib.tracks:
         print("No supported audio files found."); sys.exit(1)
-    # Backgrounds
     bg_paths: List[Path] = []
     if args.backgrounds:
         bgdir = Path(args.backgrounds).expanduser()
@@ -700,7 +675,6 @@ def main():
             bg_size_cache[key]=current_bg
         bg_dark=pygame.Surface((w,h), pygame.SRCALPHA); bg_dark.fill((0,0,0,110))
         log.debug("Background rescaled -> %s", key)
-    # View presets
     v_states = []
     for show_hud in (False, True):
         for show_fps in (False, True):
@@ -757,7 +731,6 @@ def main():
             box.blit(t, (pad, cy)); cy += t.get_height() + 4
         surf.blit(box, (x, y))
         return surf
-    # Order
     n = len(lib.tracks)
     shuffle = bool(args.shuffle)
     repeat_all = bool(args.repeat_all)
@@ -774,7 +747,6 @@ def main():
         return f"{artist} — {title}" if artist else title
     current_track: Track = lib.tracks[order[index_in_order]]
     log.debug("Initial track: %s", current_track.path.name)
-    # --- Playback helpers (music vs channel) ---
     def stop_all_playback():
         nonlocal current_main_sound
         try: pygame.mixer.music.stop()
@@ -783,17 +755,14 @@ def main():
         except Exception: pass
         current_main_sound = None
     def play_track_music(track: Track, start_sec: float = 0.0, volume: float = 0.85):
-        """Default streaming playback using mixer.music (works for whole track)."""
         nonlocal playback_mode
         stop_all_playback()
         pygame.mixer.music.load(str(track.path))
         if start_sec > 0.0:
-            # set_pos is unreliable for mp3, so use 0 and fall back to channel below if needed.
             try:
                 pygame.mixer.music.play(start=start_sec)
                 playback_mode = "music"
             except TypeError:
-                # fall back to channel seek
                 seek_and_play_with_ffmpeg(track, start_sec, volume)
                 return
         else:
@@ -801,11 +770,9 @@ def main():
             playback_mode = "music"
         pygame.mixer.music.set_volume(volume)
     def seek_and_play_with_ffmpeg(track: Track, start_sec: float, volume: float = 0.85):
-        """Precise seek: decode remainder with ffmpeg and play on Channel(0)."""
         nonlocal playback_mode, current_main_sound
         stop_all_playback()
         if not ffok:
-            # Without ffmpeg, try best-effort
             try:
                 pygame.mixer.music.load(str(track.path))
                 pygame.mixer.music.play()
@@ -814,21 +781,17 @@ def main():
             except Exception:
                 playback_mode = "music"
             return
-        # FIXED: Clamp duration to track's actual remaining length
         dur_left = min(UI.seek_segment_sec, max(0.1, (track.duration_sec or 0.0) - start_sec))
         seg = decode_pcm_segment(track.path, start_sec, dur_left, sr=AUDIO.target_sr)
         if seg.shape[0] == 0:
-            # fallback to normal play
             play_track_music(track, 0.0, volume)
             return
         current_main_sound = numpy_to_sound(seg)
         chan_main.play(current_main_sound)
         chan_main.set_volume(volume, volume)
         playback_mode = "channel"
-    # Initial playback
     volume = 0.85
     play_track_music(current_track, 0.0, volume)
-    # Playback time accounting (works for both modes)
     play_start_monotonic = time.monotonic()
     paused = False
     paused_accum = 0.0
@@ -840,26 +803,20 @@ def main():
         pause_started = None
         log.debug("Set play start: %.3f", start_sec)
     def get_play_pos() -> float:
-        # If paused, return last known position (do not advance time)
         if paused:
             if pause_started is not None:
-                # Return position at the moment pause was pressed
                 return max(0.0, pause_started - play_start_monotonic - paused_accum)
             else:
-                # Fallback: use monotonic if somehow pause_started is None
                 now = time.monotonic()
                 extra = (now - pause_started) if pause_started is not None else 0.0
                 return max(0.0, now - play_start_monotonic - (paused_accum + extra))
-        # Prefer mixer.music.get_pos when in 'music' mode & valid
         if playback_mode == "music":
             pos_ms = pygame.mixer.music.get_pos()
             if pos_ms is not None and pos_ms >= 0:
                 return pos_ms / 1000.0
-        # Generic monotonic fallback (also for 'channel' mode)
         now = time.monotonic()
         return max(0.0, now - play_start_monotonic - paused_accum)
     def seek_relative(delta_sec: float):
-        """Use precise seek via ffmpeg segment on Channel(0)."""
         cur = get_play_pos()
         dur = current_track.duration_sec or max(0.0, cur+1.0)
         new_pos = max(0.0, min(max(0.0, dur-0.05), cur + delta_sec))
@@ -867,20 +824,16 @@ def main():
         seek_and_play_with_ffmpeg(current_track, new_pos, volume)
         log.debug("Seek relative %.2f -> new_pos=%.2f (mode=%s)", delta_sec, new_pos, playback_mode)
         return new_pos
-    # Overlap for next track (same as pred, Channel(1))
     overlap_active = False
     overlap_end_time = 0.0
     overlap_seg_len = 0.0
     next_track_pending: Optional[Track] = None
-    # Global decoder executor
     decoder_executor = ThreadPoolExecutor(max_workers=2)
     def start_overlap_next(next_track: Track) -> bool:
         nonlocal overlap_active, overlap_end_time, overlap_seg_len, next_track_pending
         seg_len = min(AUDIO.crossfade_sec, max(0.5, (next_track.duration_sec or AUDIO.crossfade_sec)))
         try:
-            # Submit decode job asynchronously
             future = decoder_executor.submit(decode_pcm_segment, next_track.path, 0.0, seg_len, sr=AUDIO.target_sr)
-            # Store future for later handling
             overlap_future = future
             overlap_active   = True
             overlap_end_time = time.monotonic() + seg_len
@@ -892,10 +845,8 @@ def main():
             log.debug("Overlap start failed: %s", e)
             return False
     def finish_overlap_switch():
-        """After overlap completes: switch to next track using mixer.music at offset."""
         nonlocal overlap_active, next_track_pending, current_track, overlap_seg_len, bg_switch_pending, playback_mode
         if not next_track_pending: return
-        # stop current (both music and channel)
         stop_all_playback()
         pygame.mixer.music.load(str(next_track_pending.path))
         start_off = max(0.0, float(overlap_seg_len))
@@ -915,7 +866,6 @@ def main():
         reset_text_caches()
         bg_switch_pending = True
         log.debug("Overlap finished. Current -> %s (mode=%s)", current_track.path.name, playback_mode)
-    # --------- FFT setup & improved masks ----------
     band_mapper_full = BandMapper(VIS.fft_size, AUDIO.target_sr, VIS.n_bands)
     hann_full = _hann(VIS.fft_size)
     hann_bass = _hann(VIS.bass_fft)
@@ -938,7 +888,6 @@ def main():
     bass_mask_f = smooth_mask(freqs_bass, AUDIO.bass_low_hz, AUDIO.bass_high_hz, roll=0.25)
     freqs_voice = np.fft.rfftfreq(VIS.fft_size, 1/AUDIO.target_sr)
     voice_mask_f = smooth_mask(freqs_voice, AUDIO.voice_low_hz, AUDIO.voice_high_hz, roll=0.20)
-    # --------- FFT thread (non-blocking, no decode) ----------
     fft_lock = threading.Lock()
     fft_req_pos = 0.0
     fft_should_run = True
@@ -963,7 +912,6 @@ def main():
             _ = fft_event.wait(timeout=0.12)
             fft_event.clear()
             if not fft_should_run: break
-            # If paused: keep last values, skip heavy work
             if paused:
                 continue
             with fft_lock:
@@ -986,7 +934,6 @@ def main():
                 key = _norm_key(current_track.path)
                 cached = AN_CACHE.get(key)
                 if cached is None:
-                    # Ask loader with highest priority, do not block
                     _put_load(PRIO_NOW, "analyze", current_track.path)
                     t = time.time()
                     base = 0.12 + 0.06*math.sin(t*2.0)
@@ -1012,9 +959,7 @@ def main():
                 win_bass = make_fft_window(samples, sr, pos_an, VIS.bass_fft)
                 sp_b = np.fft.rfft(win_bass*hann_bass)
                 bb = np.abs(sp_b) * bass_mask_f
-                # --- ENHANCED BASS DETECTION ---
                 if bb.size > 0:
-                    # Apply adaptive threshold to remove noise
                     thresh = np.median(bb) * 0.3
                     bb_clean = bb[bb > thresh]
                     if bb_clean.size > 0:
@@ -1024,11 +969,16 @@ def main():
                 else:
                     bass_energy = 0.0
                 vb = mag_full * voice_mask_f
-                voice_energy = float(np.sqrt(np.mean(vb*vb))) if vb.size else 0.0
+                if vb.size:
+                    thresh_v = np.median(vb) * 0.4
+                    vb_clean = vb[vb > thresh_v]
+                    voice_energy = float(np.sqrt(np.mean(vb_clean*vb_clean))) if vb_clean.size else 0.0
+                else:
+                    voice_energy = 0.0
                 with fft_lock:
-                    fft_last_bands[:] = bands  # Copy into existing array
-                    fft_last_bass_energy = bass_energy * 1.5  # Apply sensitivity boost
-                    fft_last_voice_energy = voice_energy
+                    fft_last_bands[:] = bands
+                    fft_last_bass_energy = bass_energy * 1.5
+                    fft_last_voice_energy = voice_energy * 2.0
             except Exception as e:
                 t = time.time()
                 base = 0.12 + 0.06*math.sin(t*2.0)
@@ -1038,15 +988,13 @@ def main():
                     fft_last_voice_energy = base
                 log.debug("fft_worker error: %s", e)
         log.debug("FFT thread exit")
-    # --------- Loader threads (priority queue) ----------
     from queue import PriorityQueue
     load_q: "PriorityQueue[tuple[int,int,str,Path]]" = PriorityQueue()
     load_should_run = True
-    _load_seq = itertools.count()  # stable ordering
-    # lower prio value = higher priority
-    PRIO_NOW      = 0   # current track
-    PRIO_PREFETCH = 5   # next track
-    PRIO_BULK     = 9   # warm-up rest
+    _load_seq = itertools.count()
+    PRIO_NOW      = 0
+    PRIO_PREFETCH = 5
+    PRIO_BULK     = 9
     def _put_load(prio: int, action: str, path: Path):
         load_q.put((prio, next(_load_seq), action, path))
     def loader_worker_fn():
@@ -1079,9 +1027,7 @@ def main():
         t = threading.Thread(target=loader_worker_fn, daemon=True)
         t.start()
         loader_threads.append(t)
-    # Immediately queue analysis for current + prefetch next
     _put_load(PRIO_NOW, "analyze", current_track.path)
-    # UI state caches
     bars_state = {"radius": None, "x0": None, "y0": None}
     time_last_sec = -1
     time_cache_surf: Optional[pygame.Surface] = None
@@ -1107,7 +1053,6 @@ def main():
         hud_cache_surf = None; hud_cache_key = None
         help_cache_surf = None
     choose_background(False)
-    # Beat & history (optimized ring buffers)
     flash=0.0
     bass_env = 0.0
     bass_peak = 1e-6
@@ -1116,7 +1061,6 @@ def main():
     hist_idx = 0
     hist_filled = 0
     bass_last_beat = 0.0
-    # Robust adaptive threshold using EMA + MAD
     ema = 0.0
     ema_decay = 0.92
     mad_ema = 0.0
@@ -1131,9 +1075,7 @@ def main():
     resize_pending = False
     last_resize_time = 0.0
     help_visible = False
-    # >>> NEW: End of Queue State <<<
     end_of_queue_reached = False
-    # Start web terminal server if requested
     if args.webterm:
         start_web_terminal_server(webterm_handler)
     while running:
@@ -1188,20 +1130,10 @@ def main():
                         paused=False
                         if pause_started is not None:
                             paused_accum += time.monotonic() - pause_started; pause_started=None
-                        # Force sync visual position with actual playback
                         if playback_mode == "music":
                             pos_ms = pygame.mixer.music.get_pos()
                             if pos_ms is not None and pos_ms >= 0:
                                 set_play_start(pos_ms / 1000.0)
-                        # >>> SET ENVELOPES TO CURRENT FFT VALUES FOR SMOOTHER RESUME <<<
-                        with fft_lock:
-                            bass_peak_val = max(bass_peak*0.995, fft_last_bass_energy)
-                            bass_norm_val = fft_last_bass_energy / (bass_peak_val + 1e-9)
-                            bass_env = bass_norm_val
-                            voice_peak_val = max(voice_peak * AUDIO.voice_peak_decay, fft_last_voice_energy)
-                            voice_norm_val = fft_last_voice_energy / (voice_peak_val + 1e-9)
-                            voice_env = voice_norm_val
-                        reset_text_caches()
                         log.debug("Playback resumed")
                     else:
                         if playback_mode == "music":
@@ -1210,17 +1142,12 @@ def main():
                             pygame.mixer.pause()
                         paused=True
                         if pause_started is None: pause_started = time.monotonic()
-                        bass_env = 0.0; bass_peak = 1e-6; hist_idx = 0; hist_filled = 0; bass_hist.fill(0)
-                        ema = 0.0; mad_ema = 0.0
-                        log.debug("Playback paused")
+                        log.debug("Playback paused (state frozen)")
                 elif ev.key in (pygame.K_n, pygame.K_p):
-                    # >>> FIXED: Allow navigation after "End of Queue" <<<
                     if end_of_queue_reached and ev.key == pygame.K_p:
-                        # Go to last track
                         target_idx = len(order) - 1
                         end_of_queue_reached = False
                     elif end_of_queue_reached and ev.key == pygame.K_n:
-                        # Go to first track
                         target_idx = 0
                         end_of_queue_reached = False
                     else:
@@ -1237,7 +1164,6 @@ def main():
                             else:
                                 show_toast("End of queue")
                                 end_of_queue_reached = True
-                                # >>> Stop playback and timing <<<
                                 stop_all_playback()
                                 continue
                         else:
@@ -1246,7 +1172,7 @@ def main():
                     current_track = target_track
                     index_in_order = target_idx
                     set_play_start(0.0)
-                    play_track_music(current_track, 0.0, volume)  # start fresh in music mode
+                    play_track_music(current_track, 0.0, volume)
                     reset_text_caches()
                     bg_switch_pending = True
                     _put_load(PRIO_NOW, "analyze", current_track.path)
@@ -1297,13 +1223,11 @@ def main():
         pos_now = get_play_pos()
         dur_now = current_track.duration_sec or 0.0
         time_left = (dur_now - pos_now) if dur_now>0 else 999.0
-        # Prefetch & overlap scheduling
         if (not paused) and (not overlap_active) and (dur_now > 0):
             if time_left < 30.0 and ((index_in_order+1<len(order)) or repeat_all):
                 nxt = lib.tracks[order[(index_in_order+1)%len(order)]]
                 _put_load(PRIO_PREFETCH, "prefetch", nxt.path)
-            # Vylepšené spúšťanie crossfadeu
-            crossfade_start_threshold = max(0.5, AUDIO.crossfade_sec)  # Minimalný čas pre spustenie je 0.5s
+            crossfade_start_threshold = max(0.5, AUDIO.crossfade_sec)
             if (time_left <= crossfade_start_threshold + 0.2) and (time_left > 0.1) and (not overlap_active):
                 next_idx_auto = (index_in_order+1) % len(order) if (index_in_order+1<len(order) or repeat_all) else index_in_order
                 if next_idx_auto != index_in_order:
@@ -1315,15 +1239,12 @@ def main():
             seg_total = max(0.001, overlap_seg_len)
             t_elapsed = seg_total - max(0.0, t_left)
             frac = max(0.0, min(1.0, t_elapsed / seg_total))
-            # >>> VYLEPŠENÝ SMOOTH COSINE CROSSFADE <<<
-            out_curve = 0.5 * (1 + math.cos(math.pi * frac))  # Cosine fade out (začína pri 1, končí pri 0)
-            in_curve = 0.5 * (1 - math.cos(math.pi * frac))   # Cosine fade in (začína pri 0, končí pri 1)
-            # fade out current main (music or channel)
+            out_curve = 0.5 * (1 + math.cos(math.pi * frac))
+            in_curve = 0.5 * (1 - math.cos(math.pi * frac))
             if playback_mode == "music":
                 pygame.mixer.music.set_volume(out_curve * volume)
             else:
                 chan_main.set_volume(out_curve * volume, out_curve * volume)
-            # fade in overlap
             chan_overlap.set_volume(in_curve * volume, in_curve * volume)
             if t_left <= 0.0:
                 finish_overlap_switch()
@@ -1337,31 +1258,25 @@ def main():
             if bg_dark: screen.blit(bg_dark,(0,0))
         else:
             screen.fill(VIS.bg_color)
-        # clear reusable surfaces
         vis_surf.fill((0,0,0,0))
         text_surf.fill((0,0,0,0))
-        # Request FFT periodically (skip if paused to save CPU)
         if (not paused) and ((frame_idx % max(1, int(VIS.fft_every_n_frames))) == 0):
             with fft_lock: fft_req_pos = pos_now
             fft_event.set()
-        # Fetch FFT results
         with fft_lock:
             bands = fft_last_bands.copy()
             bass_energy = float(fft_last_bass_energy)
             voice_energy = float(fft_last_voice_energy)
-        # Envelope followers (keep simple when paused)
         if not paused:
             bass_peak = max(bass_peak*0.995, bass_energy)
             bass_norm = bass_energy / (bass_peak + 1e-9)
             if bass_norm > bass_env: bass_env += AUDIO.attack*(bass_norm - bass_env)
             else: bass_env += (AUDIO.rel_slow if bass_norm<0.1 else AUDIO.rel_fast)*(bass_norm - bass_env)
             bass_env = float(np.clip(bass_env, 0.0, 1.0))
-            # History ring buffer
             bass_hist[hist_idx] = bass_env
             hist_idx = (hist_idx + 1) % hist_len
             hist_filled = min(hist_filled+1, hist_len)
             hist_view = bass_hist[:hist_filled]
-            # Adaptive threshold (EMA + MAD)
             if hist_filled > 4:
                 ema = ema_decay*ema + (1-ema_decay)*bass_env
                 mad = np.median(np.abs(hist_view - np.median(hist_view)))
@@ -1373,7 +1288,6 @@ def main():
             if (bass_env > thresh) and ((nowt - bass_last_beat) > AUDIO.beat_min_gap):
                 flash = 1.0; bass_last_beat = nowt
             flash = max(0.0, flash*0.85)
-            # Voice env
             voice_peak = max(voice_peak * AUDIO.voice_peak_decay, voice_energy)
             voice_norm = voice_energy / (voice_peak + 1e-9)
             if voice_norm > voice_env:
@@ -1381,14 +1295,8 @@ def main():
             else:
                 voice_env += (AUDIO.voice_rel_slow if voice_norm < 0.1 else AUDIO.voice_rel_fast) * (voice_norm - voice_env)
             voice_env = max(0.0, min(1.0, voice_env))
-        else:
-            # keep visuals steady when paused
-            flash = max(0.0, flash*0.9)
-            bass_env *= 0.98
-            voice_env *= 0.98
         state = {"pos":pos_now,"dur":dur_now,"bass_env":bass_env,"flash":flash,"bands":bands,"fps":clock.get_fps(),"bars":bars_state,"voice_env":voice_env}
         draw_visuals(screen, vis_surf, state)
-        # -------- Text/UI --------
         st_view = v_states[v_mode]
         show_time = st_view["time"]
         show_title = st_view["title"]
@@ -1424,7 +1332,6 @@ def main():
             dbg = f"FPS {fps:4.1f} | pos {pos_now:6.2f}/{dur_now:6.2f} | overlap {'Y' if overlap_active else 'N'} | idx {index_in_order+1}/{len(order)} | V {v_mode+1}/{len(v_states)} | mode {playback_mode}"
             ds = font_small_sys.render(dbg, True, (200,200,200))
             text_surf.blit(ds, (14, h-10-ds.get_height()))
-        # composite with transparency
         vis_surf.set_alpha(VIS.ui_alpha)
         screen.blit(vis_surf,(0,0))
         if any_text_allowed or help_visible or (time.time()<toast_until):
@@ -1436,15 +1343,13 @@ def main():
         pygame.display.flip()
         frame_idx += 1
         clock.tick_busy_loop(VIS.fps_target)
-        # End-of-track fallback (if no overlap)
         if (not overlap_active) and (dur_now > 0):
-            # >>> FIXED: Robust end-of-track detection <<<
             track_ended = False
             if pos_now >= dur_now - 0.05:
                 if playback_mode == "music":
                     if not pygame.mixer.music.get_busy():
                         track_ended = True
-                else: # channel mode
+                else:
                     if not chan_main.get_busy():
                         track_ended = True
             if track_ended:
@@ -1453,7 +1358,7 @@ def main():
                     next_track = lib.tracks[order[next_idx]]
                     current_track = next_track; index_in_order = next_idx
                     set_play_start(0.0)
-                    play_track_music(current_track, 0.0, volume)  # start next in music mode
+                    play_track_music(current_track, 0.0, volume)
                     reset_text_caches()
                     bg_switch_pending = True
                     _put_load(PRIO_NOW, "analyze", current_track.path)
@@ -1465,14 +1370,12 @@ def main():
                     show_toast("End of queue")
                     end_of_queue_reached = True
                     stop_all_playback()
-    # -------- Cleanup --------
     try:
         log.debug("Shutting down…")
         fft_should_run = False
         fft_event.set()
         load_should_run = False
         try:
-            # wake workers
             for _ in loader_threads:
                 _put_load(PRIO_BULK, "prefetch", current_track.path)
         except Exception:
@@ -1493,17 +1396,15 @@ def main():
         decoder_executor.shutdown(wait=False)
         pygame.quit()
         log.debug("Exited cleanly")
-# ---------------- Web Terminal Server ----------------
 async def webterm_handler(websocket, path, log_handler):
-    """Handle a single WebSocket connection for the web terminal."""
     log_handler.add_client(websocket)
     try:
-        # Send welcome message
-        await websocket.send("Welcome to VMP Web Terminal!\n")
-        await websocket.send("You can send commands like 'n', 'p', ' ', 'q' to control the player.\n")
+        await websocket.send("Welcome to VMP Web Terminal!\
+")
+        await websocket.send("You can send commands like 'n', 'p', ' ', 'q' to control the player.\
+")
         async for message in websocket:
             try:
-                # Simulate key press based on message
                 cmd = message.strip().lower()
                 if cmd == 'n':
                     pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_n}))
@@ -1518,19 +1419,20 @@ async def webterm_handler(websocket, path, log_handler):
                 elif cmd == 'left':
                     pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_LEFT}))
                 else:
-                    await websocket.send(f"Unknown command: {cmd}\n")
+                    await websocket.send(f"Unknown command: {cmd}\
+")
             except Exception as e:
-                await websocket.send(f"Error processing command: {e}\n")
+                await websocket.send(f"Error processing command: {e}\
+")
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
         log_handler.remove_client(websocket)
 def start_web_terminal_server(log_handler):
-    """Start the web terminal server in a separate thread."""
     def run_server():
         async def server():
             async with websockets.serve(lambda ws, path: webterm_handler(ws, path, log_handler), "localhost", 3030):
-                await asyncio.Future()  # run forever
+                await asyncio.Future()
         asyncio.run(server())
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
