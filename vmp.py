@@ -72,7 +72,7 @@ class UiCfg:
 AUDIO = AudioCfg(eq_default={"low":+1.5,"mid":0.0,"high":+0.5}, softclip=True)
 VIS = VisualCfg()
 UI = UiCfg()
-MUSIC_DIR = "music"  # Zmenené z "C:\Music" na "music" (relatívna cesta)
+MUSIC_DIR = "music"
 BG_DIR    = "backgrounds"
 SCAN_EXTS = (".mp3", ".wav", ".flac", ".ogg", ".m4a")
 FONT_PATH  = Path(__file__).with_name("cyberpunk.ttf")
