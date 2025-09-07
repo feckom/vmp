@@ -3,12 +3,6 @@ import os, sys, math, random, re, time, argparse, logging, threading, subprocess
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
-import io
-import socket
-import json
-import base64
-import asyncio
-import websockets
 os.environ.setdefault("SDL_RENDER_DRIVER", "direct3d")
 os.environ.setdefault("SDL_HINT_RENDER_SCALE_QUALITY", "1")
 import numpy as np
@@ -19,6 +13,7 @@ from mutagen import File as MutaFile
 from mutagen.easyid3 import EasyID3
 from pydub import AudioSegment
 from concurrent.futures import ThreadPoolExecutor
+
 @dataclass
 class AudioCfg:
     target_sr: int = 44100
@@ -38,6 +33,7 @@ class AudioCfg:
     voice_rel_fast: float = 0.10
     voice_rel_slow: float = 0.05
     voice_peak_decay: float = 0.995
+
 @dataclass
 class VisualCfg:
     fps_target: int = 60
@@ -65,43 +61,24 @@ class VisualCfg:
     voice_max_pulse_px: int = 18
     voice_alpha_min: int = 40
     voice_alpha_max: int = 220
+
 @dataclass
 class UiCfg:
     next_cooldown_sec: float = 0.35
     volume_popup_sec: float = 0.9
     toast_sec: float = 1.4
     seek_segment_sec: float = 30.0
+
 AUDIO = AudioCfg(eq_default={"low":+1.5,"mid":0.0,"high":+0.5}, softclip=True)
 VIS = VisualCfg()
 UI = UiCfg()
-MUSIC_DIR = r"C:\Music"
-BG_DIR    = ""
+MUSIC_DIR = "music"  # Zmenené z "C:\Music" na "music" (relatívna cesta)
+BG_DIR    = "backgrounds"
 SCAN_EXTS = (".mp3", ".wav", ".flac", ".ogg", ".m4a")
 FONT_PATH  = Path(__file__).with_name("cyberpunk.ttf")
 log = logging.getLogger("vmp")
-class WebTermHandler(logging.Handler):
-    def __init__(self):
-        super().__init__()
-        self.clients = set()
-        self.lock = threading.Lock()
-    def emit(self, record):
-        try:
-            msg = self.format(record)
-            with self.lock:
-                for client in list(self.clients):
-                    try:
-                        asyncio.run_coroutine_threadsafe(client.send(msg), asyncio.get_event_loop())
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-    def add_client(self, client):
-        with self.lock:
-            self.clients.add(client)
-    def remove_client(self, client):
-        with self.lock:
-            self.clients.discard(client)
-def setup_logging(debug=False, webterm_handler=None):
+
+def setup_logging(debug=False):
     import logging.handlers
     lg = logging.getLogger("vmp")
     for h in list(lg.handlers): lg.removeHandler(h)
@@ -109,10 +86,6 @@ def setup_logging(debug=False, webterm_handler=None):
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     ch = logging.StreamHandler(sys.stdout); ch.setFormatter(fmt); ch.setLevel(logging.DEBUG if debug else logging.INFO)
     lg.addHandler(ch)
-    if webterm_handler:
-        webterm_handler.setFormatter(fmt)
-        webterm_handler.setLevel(logging.DEBUG if debug else logging.INFO)
-        lg.addHandler(webterm_handler)
     try:
         log_dir = Path("logs"); log_dir.mkdir(exist_ok=True)
         fh = logging.handlers.RotatingFileHandler(log_dir/"player.log", maxBytes=4_000_000, backupCount=5, encoding="utf-8")
@@ -122,6 +95,7 @@ def setup_logging(debug=False, webterm_handler=None):
     logging.getLogger().setLevel(logging.WARNING)
     lg.debug("Logging initialized. Debug=%s", debug)
     return lg
+
 def ensure_ffmpeg():
     if shutil.which("ffmpeg") is None:
         log.critical("FFmpeg not found in PATH.")
@@ -133,16 +107,20 @@ def ensure_ffmpeg():
     except Exception as e:
         log.critical("FFmpeg probe failed: %s", e)
         return False
+
 def format_time(sec: float) -> str:
     sec = max(0, int(sec)); m, s = divmod(sec, 60); return f"{m:02d}:{s:02d}"
+
 _CLEAN_PAT   = re.compile(r"(?i)\b(official\s*video|lyrics?|audio|hd|hq|remaster(?:ed)?|live|clip|mv|visualizer|topic|karaoke|instrumental|mono|stereo|remix|mix|edit|radio\s*edit|feat\.?.+|ft\.?.+)\b")
 _BRACKETS    = re.compile(r"[\(\[\{].*?[\)\]\}]")
 _MULTI_SPACE = re.compile(r"\s{2,}")
+
 def _smart_titlecase(s: str) -> str:
     s = s.strip().title()
     for w in ["And","Or","The","Of","Ft.","Feat.","Vs.","A","An","To","In","On","For","With","From","By","At","As","But"]:
         s = re.sub(rf"\b{w}\b", w.lower(), s)
     return s
+
 def guess_from_filename(path: Path) -> Tuple[Optional[str], Optional[str]]:
     name = path.stem.replace("_"," ").replace("."," ")
     name = re.sub(r"^\s*\d{1,3}\s*[-. ]\s*","",name)
@@ -159,11 +137,13 @@ def guess_from_filename(path: Path) -> Tuple[Optional[str], Optional[str]]:
         parent = _MULTI_SPACE.sub(" ", _BRACKETS.sub(" ", path.parent.name.replace("_"," "))).strip()
         if parent and parent.lower() not in ("music","mp3","tracks","songs"): artist = _smart_titlecase(parent)
     return (title or None, artist or None)
+
 def _norm_key(path: Path | str) -> str:
     try:
         return str(Path(path).resolve()).lower()
     except Exception:
         return str(path).replace("\\", "/").lower()
+
 class Track:
     def __init__(self, path: Path, no_tags: bool=False):
         self.path = path
@@ -174,6 +154,7 @@ class Track:
         self.analysis_ready = False
         log.debug("Track created: %s | title=%s artist=%s dur=%.2fs",
                   path.name, self.title, self.artist, self.duration_sec)
+
     def _read_or_guess_tags(self) -> Tuple[Optional[str], Optional[str]]:
         title=None; artist=None
         try:
@@ -189,23 +170,27 @@ class Track:
         title  = str(title).strip()  if title  and str(title).strip()  else None
         artist = str(artist).strip() if artist and str(artist).strip() else None
         return (title, artist)
+
     def _fast_length(self) -> float:
         try:
             mf = MutaFile(str(self.path))
             if mf and mf.info and getattr(mf.info,"length",None): return float(mf.info.length)
         except Exception: pass
         return 0.0
+
 class AnalysisCache:
     def __init__(self, capacity:int=64):
         self.cap = capacity
         self.od: "collections.OrderedDict[str,Tuple[np.ndarray,int,float]]" = collections.OrderedDict()
         self.lock = threading.Lock()
+
     def get(self, key:str) -> Optional[Tuple[np.ndarray,int,float]]:
         with self.lock:
             v = self.od.get(key)
             if v is not None:
                 self.od.move_to_end(key)
             return v
+
     def put(self, key:str, samples:np.ndarray, sr:int, dur:float):
         with self.lock:
             if key in self.od:
@@ -214,13 +199,16 @@ class AnalysisCache:
             while len(self.od) > self.cap:
                 k,_ = self.od.popitem(last=False)
                 log.debug("AnalysisCache: evict %s", Path(k).name)
+
 AN_CACHE = AnalysisCache(capacity=64)
+
 class Library:
     def __init__(self, exts: Tuple[str,...], ignore_dirs: List[str], no_tags: bool):
         self.tracks: List[Track] = []
         self.exts = tuple(x.lower().strip() for x in exts)
         self.ignore_dirs = set(d.lower() for d in ignore_dirs)
         self.no_tags = no_tags
+
     def scan(self, base_dir: Path):
         log.info("Scanning library: %s", base_dir)
         add = self.tracks.append
@@ -236,6 +224,7 @@ class Library:
                 log.warning("Scan skip (path issue) %s: %s", p, e)
         self.tracks.sort(key=lambda t: str(t.path).lower())
         log.info("Scan complete: %d tracks", len(self.tracks))
+
 def biquad_low_shelf(f0, sr, gain_db, S=1.0):
     A = 10**(gain_db/40); w0=2*math.pi*f0/sr; alpha=math.sin(w0)/2*math.sqrt((A+1/A)*(1/S-1)+2)
     cosw=math.cos(w0)
@@ -246,6 +235,7 @@ def biquad_low_shelf(f0, sr, gain_db, S=1.0):
     a1 =   -2*((A-1)+(A+1)*cosw)
     a2 =        (A+1+(A-1)*cosw - 2*np.sqrt(A)*alpha)
     return np.array([b0/a0,b1/a0,b2/a0,a1/a0,a2/a0], dtype=np.float64)
+
 def biquad_high_shelf(f0, sr, gain_db, S=1.0):
     A = 10**(gain_db/40); w0=2*math.pi*f0/sr; alpha=math.sin(w0)/2*math.sqrt((A+1/A)*(1/S-1)+2)
     cosw=math.cos(w0)
@@ -256,6 +246,7 @@ def biquad_high_shelf(f0, sr, gain_db, S=1.0):
     a1 =    2*( (A-1)-(A+1)*cosw )
     a2 =        (A+1-(A-1)*cosw - 2*np.sqrt(A)*alpha)
     return np.array([b0/a0,b1/a0,b2/a0,a1/a0,a2/a0], dtype=np.float64)
+
 def biquad_peaking(f0, sr, gain_db, Q=1.0):
     A = 10**(gain_db/40); w0=2*math.pi*f0/sr; alpha=math.sin(w0)/(2*Q); cosw=math.cos(w0)
     b0 = 1 + alpha*A
@@ -265,6 +256,7 @@ def biquad_peaking(f0, sr, gain_db, Q=1.0):
     a1 = -2*cosw
     a2 = 1 - alpha/A
     return np.array([b0/a0,b1/a0,b2/a0,a1/a0,a2/a0], dtype=np.float64)
+
 def biquad_filter(x: np.ndarray, coeffs: np.ndarray) -> np.ndarray:
     b0,b1,b2,a1,a2 = coeffs
     y = np.zeros_like(x, dtype=np.float32)
@@ -274,6 +266,7 @@ def biquad_filter(x: np.ndarray, coeffs: np.ndarray) -> np.ndarray:
         yn = b0*xn + b1*x1 + b2*x2 - a1*y1 - a2*y2
         y[i]=yn; x2=x1; x1=xn; y2=y1; y1=yn
     return y
+
 def apply_eq_limiter_stereo(buf: np.ndarray, sr: int, eq_db: dict, softclip=True) -> np.ndarray:
     if eq_db:
         ls = biquad_low_shelf(120, sr, eq_db.get("low",0.0))
@@ -284,6 +277,7 @@ def apply_eq_limiter_stereo(buf: np.ndarray, sr: int, eq_db: dict, softclip=True
     if softclip:
         buf = np.tanh(2.2*buf) / np.tanh(2.2)
     return np.clip(buf, -0.999, 0.999)
+
 def decode_pcm_segment(path: Path, start_sec: float, dur_sec: float, sr=AUDIO.target_sr) -> np.ndarray:
     ss = max(0.0, start_sec)
     cmd = ["ffmpeg","-hide_banner","-loglevel","error","-ss", f"{ss:.3f}","-t", f"{float(dur_sec):.3f}",
@@ -304,10 +298,12 @@ def decode_pcm_segment(path: Path, start_sec: float, dur_sec: float, sr=AUDIO.ta
     data = np.frombuffer(out, dtype=np.int16)
     if data.size == 0: return np.zeros((int(dur_sec*sr),2), np.float32)
     return (data.reshape(-1,2).astype(np.float32))/32768.0
+
 def numpy_to_sound(arr_float_stereo: np.ndarray) -> pygame.mixer.Sound:
     arr = np.clip(arr_float_stereo, -1.0, 1.0)
     arr16 = (arr * 32767.0).astype(np.int16)
     return pygame.sndarray.make_sound(arr16)
+
 _hann_cache: Dict[int, np.ndarray] = {}
 def _hann(size: int) -> np.ndarray:
     h = _hann_cache.get(size)
@@ -316,6 +312,7 @@ def _hann(size: int) -> np.ndarray:
         h = np.hanning(size).astype(np.float32)
         _hann_cache[size] = h
     return h
+
 _fft_window_cache: Dict[int, np.ndarray] = {}
 def make_fft_window(samples, sr, pos_sec, size=VIS.fft_size):
     key = size
@@ -337,6 +334,7 @@ def make_fft_window(samples, sr, pos_sec, size=VIS.fft_size):
     else:
         window.fill(0.0)
     return window
+
 class BandMapper:
     def __init__(self, n_time: int, sr: int, n_bands: int):
         self.sr = sr
@@ -353,6 +351,7 @@ class BandMapper:
             idxs.append(mask)
         self.idxs = idxs
         self.band_weights = np.linspace(1.15, 0.85, n_bands).astype(np.float32)
+
     def map(self, spectrum_abs: np.ndarray) -> np.ndarray:
         all_indices = np.concatenate(self.idxs)
         all_values = spectrum_abs[all_indices]
@@ -367,8 +366,10 @@ class BandMapper:
             band_rms /= vmax
         band_rms *= self.band_weights
         return np.clip(band_rms, 0.0, 1.0)
+
 _cached_dotted: Dict[int, pygame.Surface] = {}
 _cached_glow: Dict[Tuple[int,int,Tuple[int,int,int],int], pygame.Surface] = {}
+
 def build_dotted_ring_surface(radius: int, count: int, color_rgb: Tuple[int,int,int]) -> pygame.Surface:
     if radius in _cached_dotted: return _cached_dotted[radius]
     size = radius*2+6
@@ -382,6 +383,7 @@ def build_dotted_ring_surface(radius: int, count: int, color_rgb: Tuple[int,int,
     _cached_dotted[radius]=surf
     log.debug("Build dotted ring: r=%d", radius)
     return surf
+
 def build_glow_circle_surface(radius:int, glow:int, color_rgb:Tuple[int,int,int], thickness:int=2) -> pygame.Surface:
     key=(radius,glow,color_rgb,thickness)
     if key in _cached_glow: return _cached_glow[key]
@@ -395,8 +397,10 @@ def build_glow_circle_surface(radius:int, glow:int, color_rgb:Tuple[int,int,int]
         pygame.draw.circle(surf, col, center, radius+i, width=thickness)
     _cached_glow[key]=surf
     return surf
+
 def blit_center(dst: pygame.Surface, src: pygame.Surface, pos: Tuple[int,int]):
     dst.blit(src, src.get_rect(center=pos))
+
 def draw_progress_arc_aa(surf, rect, start_angle, fraction, color_rgb, width):
     fraction = max(0.0, min(1.0, fraction))
     color=(*color_rgb,255)
@@ -404,14 +408,19 @@ def draw_progress_arc_aa(surf, rect, start_angle, fraction, color_rgb, width):
     pygame.draw.arc(surf,color,rect,start_angle,end_angle,width)
     for d in (-width//2, width//2):
         pygame.draw.arc(surf, color, rect.inflate(d,d), start_angle, end_angle, 1)
+
 def lerp(a,b,t): return a+(b-a)*max(0.0,min(1.0,t))
+
 def lerp_color(c1,c2,t): return (int(lerp(c1[0],c2[0],t)),int(lerp(c1[1],c2[1],t)),int(lerp(c1[2],c2[2],t)))
+
 def load_system(size:int, bold=True):
     name = pygame.font.match_font('segoe ui,segoeui,arial,tahoma,verdana,calibri,dejavusans', bold=bold)
     return pygame.font.Font(name, size) if name else pygame.font.SysFont(None, size, bold=bold)
+
 def load_cyber(size:int):
     try: return pygame.font.Font(str(FONT_PATH), size)
     except Exception: return load_system(size, bold=True)
+
 def parse_args():
     ap = argparse.ArgumentParser(description="Cyberpunk circular music player (optimized)")
     ap.add_argument("--music-dir", default=MUSIC_DIR)
@@ -424,8 +433,8 @@ def parse_args():
     ap.add_argument("--ext", default=",".join(SCAN_EXTS))
     ap.add_argument("--ignore", default="")
     ap.add_argument("--no-tags", action="store_true")
-    ap.add_argument("--webterm", action="store_true", help="Start web terminal on port 3030")
     return ap.parse_args()
+
 def win_toggle_topmost():
     if platform.system() != "Windows": return
     try:
@@ -438,6 +447,7 @@ def win_toggle_topmost():
         log.debug("Topmost toggled -> %s", "ON" if not is_top else "OFF")
     except Exception as e:
         log.debug("Topmost toggle failed: %s", e)
+
 def win_drag_window():
     if platform.system() != "Windows": return
     try:
@@ -447,14 +457,17 @@ def win_drag_window():
         u32.SendMessageW(hwnd, 0x00A1, 2, 0)
     except Exception as e:
         log.debug("Drag failed: %s", e)
+
 def get_desktop_size() -> Tuple[int,int]:
     try:
         info = pygame.display.Info()
         return (max(640, int(info.current_w)), max(480, int(info.current_h)))
     except Exception:
         return (1920,1080)
+
 COS_ARR = np.cos(2*np.pi*np.arange(VIS.n_bands)/VIS.n_bands - np.pi/2.0).astype(np.float32)
 SIN_ARR = np.sin(2*np.pi*np.arange(VIS.n_bands)/VIS.n_bands - np.pi/2.0).astype(np.float32)
+
 def draw_visuals(screen, vis_surf, state):
     w, h = screen.get_size()
     cx, cy = w // 2, h // 2
@@ -482,7 +495,7 @@ def draw_visuals(screen, vis_surf, state):
     for i in range(n_points):
         angle = angles[i]
         base_r = radius * 0.4
-        r = base_r * (0.15 + 1.7 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][i % VIS.n_bands] + jitter * (random.random() - 0.5))
+        r = base_r * (0.2 + 1.8 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][i % VIS.n_bands] + jitter * (random.random() - 0.5))
         x = cx + r * np.cos(angle)
         y = cy + r * np.sin(angle)
         points.append((int(x), int(y)))
@@ -511,22 +524,10 @@ def draw_visuals(screen, vis_surf, state):
         halo = build_glow_circle_surface(radius + 8, glow=36, color_rgb=energy_color, thickness=3)
         halo.set_alpha(int(255 * state["flash"]))
         blit_center(vis_surf, halo, (cx, cy))
-def extract_palette_from_image(image: pygame.Surface, num_colors: int = 5) -> List[Tuple[int, int, int]]:
-    try:
-        image = pygame.transform.smoothscale(image, (100, 100))
-        pixels = pygame.surfarray.array3d(image)
-        pixels = pixels.reshape(-1, 3)
-        from sklearn.cluster import KMeans
-        kmeans = KMeans(n_clusters=num_colors, n_init=10)
-        kmeans.fit(pixels)
-        colors = kmeans.cluster_centers_.astype(int)
-        return [tuple(c) for c in colors]
-    except Exception:
-        return [VIS.glow_color, VIS.bar_color, VIS.red, VIS.yellow, VIS.white]
+
 def main():
     args = parse_args()
-    webterm_handler = WebTermHandler() if args.webterm else None
-    setup_logging(args.debug, webterm_handler)
+    setup_logging(args.debug)
     ffok = ensure_ffmpeg()
     pygame.init()
     flags_windowed = pygame.RESIZABLE | pygame.DOUBLEBUF
@@ -616,9 +617,8 @@ def main():
     bg_dark: Optional[pygame.Surface] = None
     original_bg_surface: Optional[pygame.Surface] = None
     bg_size_cache: Dict[Tuple[int,int], pygame.Surface] = {}
-    current_palette = [VIS.glow_color, VIS.bar_color, VIS.red, VIS.yellow, VIS.white]
     def choose_background(force=False):
-        nonlocal current_bg, bg_dark, bg_index, original_bg_surface, bg_size_cache, current_palette
+        nonlocal current_bg, bg_dark, bg_index, original_bg_surface, bg_size_cache
         if not bg_enabled or not bg_paths:
             current_bg=None; bg_dark=None; original_bg_surface=None; bg_size_cache.clear(); return
         if force:
@@ -636,7 +636,6 @@ def main():
             x=(img.get_width()-w)//2; y=(img.get_height()-h)//2
             current_bg=img.subsurface(pygame.Rect(x,y,w,h)).copy()
             bg_dark=pygame.Surface((w,h), pygame.SRCALPHA); bg_dark.fill((0,0,0,110))
-            current_palette = extract_palette_from_image(current_bg)
             log.debug("Background loaded: %s", p.name)
         except Exception as e:
             log.debug("BG load fail: %s", e); current_bg=None; bg_dark=None; original_bg_surface=None; bg_size_cache.clear()
@@ -683,11 +682,6 @@ def main():
         pad = 14
         lines = [
             "H – Help (toggle)",
-            "1 – View preset 1",
-            "2 – View preset 2",
-            "3 – View preset 3",
-            "4 – View preset 4",
-            "5 – View preset 5",
             "V – Next preset",
             "F2 – Cycle all view combinations",
             "F – Toggle Fake Fullscreen",
@@ -695,8 +689,6 @@ def main():
             "B – Toggle Backgrounds",
             "[ – Previous Background",
             "] – Next Background",
-            "O – Decrease Opacity",
-            "Shift+O – Increase Opacity",
             "Space – Pause/Resume",
             "N – Next Track",
             "P – Previous Track",
@@ -711,8 +703,6 @@ def main():
             "LMB drag – Move window (when no background)",
             "Esc / Q – Quit"
         ]
-        if args.webterm:
-            lines.append("Web Terminal: http://localhost:3030")
         col_bg = (0, 0, 0, 180)
         col_frame = (255, 255, 255, 60)
         surf = pygame.Surface((w, h), pygame.SRCALPHA)
@@ -1072,8 +1062,6 @@ def main():
     last_resize_time = 0.0
     help_visible = False
     end_of_queue_reached = False
-    if args.webterm:
-        start_web_terminal_server(webterm_handler)
     while running:
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
@@ -1109,14 +1097,6 @@ def main():
                 elif ev.key == pygame.K_RIGHTBRACKET:
                     if bg_paths:
                         bg_index = (bg_index + 1) % len(bg_paths); choose_background(True)
-                elif ev.key == pygame.K_o:
-                    try:
-                        cur = pygame.display.get_window_alpha() if hasattr(pygame.display, "get_window_alpha") else 1.0
-                        if pygame.key.get_mods() & pygame.KMOD_SHIFT: window_opacity = min(1.0, (cur or 1.0) + 0.05)
-                        else: window_opacity = max(0.2, (cur or 1.0) - 0.05)
-                        pygame.display.set_window_alpha(window_opacity)
-                        log.debug("Opacity -> %.2f", window_opacity)
-                    except Exception: pass
                 elif ev.key == pygame.K_SPACE:
                     if paused:
                         if playback_mode == "music":
@@ -1342,14 +1322,6 @@ def main():
             else:
                 voice_env += (AUDIO.voice_rel_slow if voice_norm < 0.1 else AUDIO.voice_rel_fast) * (voice_norm - voice_env)
             voice_env = max(0.0, min(1.0, voice_env))
-        if current_palette and len(current_palette) >= 3:
-            VIS.glow_color = current_palette[0]
-            VIS.bar_color = current_palette[1]
-            VIS.red = current_palette[2]
-            if len(current_palette) >= 4:
-                VIS.yellow = current_palette[3]
-            if len(current_palette) >= 5:
-                VIS.white = current_palette[4]
         state = {"pos":pos_now,"dur":dur_now,"bass_env":bass_env,"flash":flash,"bands":bands,"fps":clock.get_fps(),"bars":bars_state,"voice_env":voice_env}
         draw_visuals(screen, vis_surf, state)
         st_view = v_states[v_mode]
@@ -1451,46 +1423,6 @@ def main():
         decoder_executor.shutdown(wait=False)
         pygame.quit()
         log.debug("Exited cleanly")
-async def webterm_handler(websocket, path, log_handler):
-    log_handler.add_client(websocket)
-    try:
-        await websocket.send("Welcome to VMP Web Terminal!\
-")
-        await websocket.send("You can send commands like 'n', 'p', ' ', 'q' to control the player.\
-")
-        async for message in websocket:
-            try:
-                cmd = message.strip().lower()
-                if cmd == 'n':
-                    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_n}))
-                elif cmd == 'p':
-                    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_p}))
-                elif cmd == ' ':
-                    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_SPACE}))
-                elif cmd == 'q':
-                    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_q}))
-                elif cmd == 'right':
-                    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_RIGHT}))
-                elif cmd == 'left':
-                    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_LEFT}))
-                else:
-                    await websocket.send(f"Unknown command: {cmd}\
-")
-            except Exception as e:
-                await websocket.send(f"Error processing command: {e}\
-")
-    except websockets.exceptions.ConnectionClosed:
-        pass
-    finally:
-        log_handler.remove_client(websocket)
-def start_web_terminal_server(log_handler):
-    def run_server():
-        async def server():
-            async with websockets.serve(lambda ws, path: webterm_handler(ws, path, log_handler), "localhost", 3030):
-                await asyncio.Future()
-        asyncio.run(server())
-    server_thread = threading.Thread(target=run_server, daemon=True)
-    server_thread.start()
-    log.info("Web terminal server started on ws://localhost:3030")
+
 if __name__=="__main__":
     main()
