@@ -61,6 +61,19 @@ class VisualCfg:
     voice_max_pulse_px: int = 18
     voice_alpha_min: int = 40
     voice_alpha_max: int = 220
+    # Flubber amorphous shape (centered, bass-driven size)
+    flub_points: int = 96                  # polygon detail (64–128 OK)
+    flub_base_frac: float = 0.42           # base_r = radius * flub_base_frac
+    flub_inner_cap_frac: float = 1.50      # never exceed radius * this (allows overflow)
+    flub_amorphous_intensity: float = 0.22 # overall wobble amplitude
+    flub_voice_amorphous_gain: float = 0.15# extra wobble from voice_env
+    flub_amorphous_speed: float = 0.60     # time speed of wobble
+    flub_angular_noise_scale: float = 2.00 # how fast shape changes around ring
+    flub_smooth_iters: int = 2             # Chaikin smoothing iterations (0–3)
+    # Dynamické zväčšovanie podľa basov
+    flub_min_size_multiplier: float = 0.7  # Minimálna veľkosť (keď bass_env = 0.0)
+    flub_max_size_multiplier: float = 2.0  # Maximálna veľkosť (keď bass_env = 1.0)
+
 
 @dataclass
 class UiCfg:
@@ -422,7 +435,7 @@ def load_cyber(size:int):
     except Exception: return load_system(size, bold=True)
 
 def parse_args():
-    ap = argparse.ArgumentParser(description="Cyberpunk circular music player (optimized)")
+    ap = argparse.ArgumentParser(description="Visual Music Player v0.1")
     ap.add_argument("--music-dir", default=MUSIC_DIR)
     ap.add_argument("--backgrounds", default=BG_DIR)
     ap.add_argument("--debug", action="store_true")
@@ -467,12 +480,39 @@ def get_desktop_size() -> Tuple[int,int]:
 
 COS_ARR = np.cos(2*np.pi*np.arange(VIS.n_bands)/VIS.n_bands - np.pi/2.0).astype(np.float32)
 SIN_ARR = np.sin(2*np.pi*np.arange(VIS.n_bands)/VIS.n_bands - np.pi/2.0).astype(np.float32)
+# === Helper functions for amorphous flubber ===
+def _fbm_sine(x: float) -> float:
+    """Cheap 1D fractal noise (no deps). Returns ~[-1, 1]."""
+    return (
+        math.sin(x) * 0.60 +
+        math.sin(2.0 * x + 1.7) * 0.28 +
+        math.sin(4.0 * x + 0.9) * 0.12
+    )
+
+def _chaikin_smooth(points: list[tuple[float, float]], iterations: int = 1) -> list[tuple[float, float]]:
+    """Chaikin corner cutting for closed polygon; keeps length ~2x per iter."""
+    if iterations <= 0 or len(points) < 3:
+        return points
+    pts = points[:]
+    for _ in range(iterations):
+        new_pts = []
+        n = len(pts)
+        for i in range(n):
+            p0 = pts[i]
+            p1 = pts[(i + 1) % n]
+            q = (0.75 * p0[0] + 0.25 * p1[0], 0.75 * p0[1] + 0.25 * p1[1])
+            r = (0.25 * p0[0] + 0.75 * p1[0], 0.25 * p0[1] + 0.75 * p1[1])
+            new_pts.extend([q, r])
+        pts = new_pts
+    return pts
+
 
 def draw_visuals(screen, vis_surf, state):
     w, h = screen.get_size()
     cx, cy = w // 2, h // 2
     radius = int(min(w, h) * VIS.ring_radius_frac)
     max_bar = int(min(w, h) * VIS.bar_max_len_frac)
+
     if state["bars"]["radius"] != radius:
         x0 = (cx + (radius + 4) * COS_ARR).astype(np.int32)
         y0 = (cy + (radius + 4) * SIN_ARR).astype(np.int32)
@@ -481,32 +521,88 @@ def draw_visuals(screen, vis_surf, state):
     else:
         x0 = state["bars"]["x0"]
         y0 = state["bars"]["y0"]
+
     step = 1 if state["fps"] >= 30 else 2
     for i in range(0, VIS.n_bands, step):
         v = state["bands"][i]
-        L = int(6 + v * max_bar)
+        # Patch: Clamping hodnoty 'v'
+        L = int(6 + max(0.0, min(1.0, v)) * max_bar)
         x1 = int(x0[i] + L * COS_ARR[i])
         y1 = int(y0[i] + L * SIN_ARR[i])
         pygame.draw.line(vis_surf, (*VIS.bar_color, 255), (x0[i], y0[i]), (x1, y1), width=VIS.bar_thickness)
-    n_points = 64
+
+    # === Amorphous flubber (centered, bass-driven size) ===
+    t = pygame.time.get_ticks() / 1000.0
+    n_points = int(VIS.flub_points)
     angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
-    points = []
-    jitter = 0.05
-    for i in range(n_points):
-        angle = angles[i]
-        base_r = radius * 0.4
-        r = base_r * (0.2 + 1.8 * state["bass_env"] + 1.0 * state["voice_env"] + 0.5 * state["bands"][i % VIS.n_bands] + jitter * (random.random() - 0.5))
-        x = cx + r * np.cos(angle)
-        y = cy + r * np.sin(angle)
-        points.append((int(x), int(y)))
-    glow_color = lerp_color((255, 50, 0), (255, 150, 0), state["bass_env"])
-    gfxdraw.filled_polygon(vis_surf, points, glow_color)
-    gfxdraw.aapolygon(vis_surf, points, (255, 100, 0))
+
+    # ensure per-vertex random phases (stable across frames without global state)
+    if not hasattr(draw_visuals, "_phases") or len(draw_visuals._phases) != n_points:
+        rng = np.random.default_rng(12345)
+        draw_visuals._phases = rng.uniform(0.0, 1000.0, size=n_points).astype(np.float32)
+    phases = draw_visuals._phases
+
+    points_f: list[tuple[float, float]] = []
+    r_vals = []
+
+    base_r = radius * VIS.flub_base_frac
+    cap_r  = radius * VIS.flub_inner_cap_frac
+
+    # how strong shape breathes from audio
+    audio_amp = (VIS.flub_amorphous_intensity
+                 + VIS.flub_voice_amorphous_gain * float(state.get("voice_env", 0.0)))
+    bass_env = float(state.get("bass_env", 0.0))
+    voice_env = float(state.get("voice_env", 0.0))
+
+    # Dynamická veľkosť podľa basov – exponenciálny rast
+    exponent = 3.5
+    bass_power = bass_env ** exponent
+    size_multiplier = lerp(VIS.flub_min_size_multiplier, VIS.flub_max_size_multiplier, bass_power)
+    global_breathe = size_multiplier * (0.5 + 0.5 * _fbm_sine(t * 0.8 + 6.5))
+
+    # per-vertex
+    for i, a in enumerate(angles):
+        # local noise around ring
+        n_local = _fbm_sine(t * VIS.flub_amorphous_speed
+                            + phases[i] * 0.17
+                            + VIS.flub_angular_noise_scale * a)
+
+        # map to [0..1] influence
+        infl = 0.5 + 0.5 * n_local
+
+        # per-vertex radius
+        r = base_r * global_breathe * (1.0 + audio_amp * infl)
+
+        # gentle extra push from current band energy (ties to music)
+        r += 0.35 * base_r * float(state["bands"][i % VIS.n_bands]) * (0.4 + 0.6 * bass_env)
+
+        # Odstránenie obmedzenia na kruh
+        r = max(3.5, r)
+        r_vals.append(r)
+
+        # Centered
+        x = cx + r * math.cos(a)
+        y = cy + r * math.sin(a)
+        points_f.append((x, y))
+
+    # Optional smoothing (Chaikin)
+    if VIS.flub_smooth_iters > 0:
+        points_f = _chaikin_smooth(points_f, iterations=int(VIS.flub_smooth_iters))
+
+    # draw filled + AA outline
+    points_i = [(int(x), int(y)) for (x, y) in points_f]
+    glow_color = lerp_color((255, 50, 0), (255, 150, 0), bass_env)
+    gfxdraw.filled_polygon(vis_surf, points_i, glow_color)
+    gfxdraw.aapolygon(vis_surf, points_i, (255, 100, 0))
+
+    # voice ring pulse
     if state["voice_env"] > 0.01:
         voice_radius = int(radius * 0.7 * (1.0 + 0.5 * state["voice_env"]))
         voice_alpha = int(lerp(VIS.voice_alpha_min, VIS.voice_alpha_max, state["voice_env"]))
         voice_color = (*VIS.voice_base_color, voice_alpha)
         pygame.draw.circle(vis_surf, voice_color, (cx, cy), voice_radius, width=3)
+
+    # inner glow + bass halo
     glow1 = build_glow_circle_surface(radius, glow=10, color_rgb=glow_color, thickness=2)
     blit_center(vis_surf, glow1, (cx, cy))
     pulse_rad = int(radius * 0.85 * (1 + 0.1 * state["bass_env"]))
@@ -514,12 +610,15 @@ def draw_visuals(screen, vis_surf, state):
     pulse_surf = pygame.Surface((w, h), pygame.SRCALPHA)
     pygame.draw.circle(pulse_surf, (*pulse_col, 128), (cx, cy), pulse_rad)
     vis_surf.blit(pulse_surf, (0, 0))
+
+    # progress arc + flash
     pad = VIS.progress_width // 2 + 8
     rect = pygame.Rect(cx - radius - pad, cy - radius - pad, 2 * (radius + pad), 2 * (radius + pad))
     frac = 0.0 if state["dur"] <= 0 else min(1.0, state["pos"] / state["dur"])
     energy_t = min(1.0, state["bass_env"] ** 0.5)
     energy_color = lerp_color(lerp_color(VIS.red, VIS.yellow, energy_t), VIS.white, energy_t * 0.5)
     draw_progress_arc_aa(vis_surf, rect, -math.pi / 2, frac, energy_color, VIS.progress_width)
+
     if state["flash"] > 0:
         halo = build_glow_circle_surface(radius + 8, glow=36, color_rgb=energy_color, thickness=3)
         halo.set_alpha(int(255 * state["flash"]))
@@ -530,12 +629,15 @@ def main():
     setup_logging(args.debug)
     ffok = ensure_ffmpeg()
     pygame.init()
+    pygame.display.set_caption("VMP — Visualized Music Player")
+    icon = pygame.image.load("vmp.png")
+    pygame.display.set_icon(icon)
     flags_windowed = pygame.RESIZABLE | pygame.DOUBLEBUF
     def try_mode(size, flags, vsync):
         try: return pygame.display.set_mode(size, flags, vsync=vsync)
         except Exception: return None
     screen = try_mode((1280,720), flags_windowed, 1) or try_mode((1280,720), flags_windowed, 0) or pygame.display.set_mode((1280,720))
-    pygame.display.set_caption("VMP – Cyberpunk Ring Player (Optimized)")
+    pygame.display.set_caption("VMP – Visula Music Player v0.1")
     pygame.mixer.init(frequency=AUDIO.target_sr, channels=2, size=-16, buffer=1024)
     log.debug("Pygame mixer initialized @ %d Hz", AUDIO.target_sr)
     chan_main = pygame.mixer.Channel(0)
