@@ -11,9 +11,8 @@ from mutagen import File as MutaFile
 from mutagen.easyid3 import EasyID3
 from pydub import AudioSegment
 from collections import deque
-
-# ========== CONSOLIDATED CONFIGURATION CONSTANTS ==========
-# Audio Configuration
+# ========== CONSOLIDATED CONFIGURATION CONSTANTS (AMBER/CHARCOAL + CHILL FLUBBER) ==========
+# Audio Configuration (unchanged)
 audio_target_sample_rate = 44100
 audio_bass_low_hz = 30
 audio_bass_high_hz = 150
@@ -28,73 +27,76 @@ audio_voice_attack_speed = 0.60
 audio_voice_release_fast = 0.10
 audio_voice_release_slow = 0.05
 audio_voice_peak_decay = 0.995
-
 # Visualization Configuration
 visualization_target_fps = 60
 visualization_fft_size = 2048
 visualization_bass_fft_size = 1024
 visualization_number_of_bands = 64
 visualization_fft_every_n_frames = 1
-visualization_progress_arc_width = 14
-visualization_rays_thickness = 8
-visualization_rays_max_length_fraction = 0.26
+# Subtler, cleaner geometry
+visualization_progress_arc_width = 12
+visualization_rays_thickness = 6
+visualization_rays_max_length_fraction = 0.22
 visualization_flubber_radius_fraction = 0.18
-visualization_rays_color = (100, 100, 100)  
-visualization_text_bright_color = (240, 240, 240) 
-visualization_alert_color = (255, 40, 40)         
-visualization_lyrics_color = (255, 255, 0)       
-visualization_text_dim_color = (180, 180, 180)   
-visualization_background_color = (12, 12, 18)      
-visualization_voice_circle_base_color = (80, 80, 80)  
-visualization_title_font_size = 20   
-visualization_voice_alpha_min = 40
-visualization_voice_alpha_max = 220
-
+# --- Colorway: Neo-Amber on Charcoal ---
+# base bg: very dark charcoal, UI text: warm white, accents: amber/sand/brass
+visualization_rays_color = (212, 114, 22)            # amber rays (#D47216)
+visualization_text_bright_color = (238, 238, 235)     # warm white (#EEE EEB)
+visualization_alert_color = (255, 64, 48)             # alert red (#FF4030)
+visualization_lyrics_color = (245, 208, 66)           # soft gold (#F5D042)
+visualization_text_dim_color = (168, 170, 176)        # cool gray (#A8AAB0)
+visualization_background_color = (11, 15, 20)         # deep charcoal (#0B0F14)
+visualization_voice_circle_base_color = (168, 170, 176)  # dark brass/brown (#40301C)
+visualization_title_font_size = 20
+visualization_voice_alpha_min = 36
+visualization_voice_alpha_max = 210
 # Enhanced Flubber organism (centered, bass-driven size)
 visualization_flubber_points = 128
 visualization_flubber_base_radius_fraction = 0.42
-visualization_flubber_amorphous_intensity = 0.10
-visualization_flubber_voice_amorphous_gain = 0.05
-visualization_flubber_amorphous_speed = 0.30
-visualization_flubber_angular_noise_scale = 2.50
-
-# Dynamic scaling based on bass
-visualization_flubber_min_size_multiplier = 0.7
-visualization_flubber_max_size_multiplier = 2.2
-
-# Words through flubber (scheduler)
+# --- CHILL/LAID-BACK TUNING ---
+# lower intensity + speed, more fluid smoothing, softer angular noise
+visualization_flubber_amorphous_intensity = 0.06
+visualization_flubber_voice_amorphous_gain = 0.035
+visualization_flubber_amorphous_speed = 0.18
+visualization_flubber_angular_noise_scale = 1.80
+# Dynamic scaling based on bass (wider low end, but not jumpy)
+visualization_flubber_min_size_multiplier = 0.78
+visualization_flubber_max_size_multiplier = 1.85
+# Words through flubber (scheduler) — slower cadence to match chill vibe
 visualization_word_simple_min = 1
 visualization_word_simple_max = 3
 visualization_word_morph_min = 2
 visualization_word_morph_max = 5
-visualization_word_time_window_low = 0.20
-visualization_word_time_window_high = 0.90
+visualization_word_time_window_low = 0.25
+visualization_word_time_window_high = 0.85
 visualization_word_minimum_gap_seconds = 5.0
 visualization_word_smoke_test = False
-
-# New: Organic motion parameters
-visualization_organic_pulse_speed = 0.4
-visualization_organic_pulse_intensity = 0.15
-visualization_flubber_fluidity_factor = 0.85
-visualization_morph_duration_min_seconds = 1.5
-visualization_morph_duration_max_seconds = 4.0
-visualization_dwell_duration_min_seconds = 1.2
-visualization_dwell_duration_max_seconds = 2.5
-
-# New: Centered track info
+# Organic motion parameters — slower pulse, gentler amplitude, more fluidity
+visualization_organic_pulse_speed = 0.25
+visualization_organic_pulse_intensity = 0.10
+visualization_flubber_fluidity_factor = 0.93   # higher = more smoothing
+visualization_morph_duration_min_seconds = 1.8
+visualization_morph_duration_max_seconds = 4.2
+visualization_dwell_duration_min_seconds = 1.4
+visualization_dwell_duration_max_seconds = 2.8
+# Centered track info (unchanged)
 visualization_show_centered_info = True
 visualization_centered_info_font_size = 24
 visualization_centered_info_time_font_size = 18
 visualization_centered_info_offset_y = 120
-
-# UI Configuration
+# UI Configuration (unchanged)
 ui_next_track_cooldown_seconds = 0.35
 ui_volume_popup_duration_seconds = 0.9
 ui_toast_duration_seconds = 1.4
 ui_seek_segment_seconds = 30.0
-
+# ========== NEW FLUBBER 3D EFFECT CONSTANTS ==========
+# 3D lighting and depth parameters for Flubber
+visualization_flubber_3d_intensity = 0.45
+visualization_flubber_light_angle = 0.785  # 45 degrees in radians
+visualization_flubber_specular_power = 8.0
+visualization_flubber_depth_multiplier = 0.3
+# ========== END NEW FLUBBER 3D EFFECT CONSTANTS ==========
 # ========== END CONFIGURATION CONSTANTS ==========
-
 # ========== CONFIGURATION CLASSES (DO NOT MODIFY) ==========
 @dataclass
 class AudioCfg:
@@ -112,7 +114,6 @@ class AudioCfg:
     voice_rel_fast: float = audio_voice_release_fast
     voice_rel_slow: float = audio_voice_release_slow
     voice_peak_decay: float = audio_voice_peak_decay
-
 @dataclass
 class VisualCfg:
     fps_target: int = visualization_target_fps
@@ -166,25 +167,27 @@ class VisualCfg:
     centered_info_font_size: int = visualization_centered_info_font_size
     centered_info_time_font_size: int = visualization_centered_info_time_font_size
     centered_info_offset_y: int = visualization_centered_info_offset_y
-
+    # ========== NEW FLUBBER 3D EFFECT PARAMETERS ==========
+    flub_3d_intensity: float = visualization_flubber_3d_intensity
+    flub_light_angle: float = visualization_flubber_light_angle
+    flub_specular_power: float = visualization_flubber_specular_power
+    flub_depth_multiplier: float = visualization_flubber_depth_multiplier
+    # ========== END NEW FLUBBER 3D EFFECT PARAMETERS ==========
 @dataclass
 class UiCfg:
     next_cooldown_sec: float = ui_next_track_cooldown_seconds
     volume_popup_sec: float = ui_volume_popup_duration_seconds
     toast_sec: float = ui_toast_duration_seconds
     seek_segment_sec: float = ui_seek_segment_seconds
-
 AUDIO = AudioCfg()
 VIS = VisualCfg()
 UI = UiCfg()
 # ========== END CONFIGURATION CLASSES ==========
-
 MUSIC_DIR = "music"
 BG_DIR = "backgrounds"
 SCAN_EXTS = (".mp3", ".wav", ".flac", ".ogg", ".m4a")
 FONT_PATH = Path(__file__).with_name("vmp.ttf")
 log = logging.getLogger("vmp")
-
 # ========== OPTIMIZED CACHE SYSTEMS ==========
 _hann_cache: Dict[int, np.ndarray] = {}
 _fft_window_cache: Dict[int, np.ndarray] = {}
@@ -192,14 +195,11 @@ _cached_glow: Dict[Tuple[int,int,Tuple[int,int,int],int], pygame.Surface] = {}
 _glyph_cache: Dict[Tuple[str,int,int,int,int,bool,bool,int], np.ndarray] = {}
 _glyph_cache_max_size = 512
 _glyph_cache_access = collections.OrderedDict()
-
 # ========== PRECOMPUTED MASKS ==========
 _bass_mask_f: Optional[np.ndarray] = None
 _voice_mask_f: Optional[np.ndarray] = None
-
 # ========== LYRICS CACHE ========== (NOVÝ KÓD)
 _lyrics_cache: Dict[str, List[Tuple[float, str]]] = {}
-
 def load_lrc_file(lrc_path: Path) -> List[Tuple[float, str]]:
     """Načíta LRC súbor a vráti zoznam (časová značka, text)."""
     if not lrc_path.exists():
@@ -226,7 +226,6 @@ def load_lrc_file(lrc_path: Path) -> List[Tuple[float, str]]:
     except Exception as e:
         log.debug("Failed to load LRC file %s: %s", lrc_path.name, e)
         return []
-
 def get_current_lyric_line(lyrics: List[Tuple[float, str]], current_time: float) -> str:
     """Nájde aktuálny riadok textu na základe času."""
     if not lyrics:
@@ -238,9 +237,7 @@ def get_current_lyric_line(lyrics: List[Tuple[float, str]], current_time: float)
         else:
             break
     return current_line
-
 # ========== END LYRICS ========== (NOVÝ KÓD)
-
 def setup_logging(debug=False):
     import logging.handlers
     lg = logging.getLogger("vmp")
@@ -258,7 +255,6 @@ def setup_logging(debug=False):
     logging.getLogger().setLevel(logging.WARNING)
     lg.debug("Logging initialized. Debug=%s", debug)
     return lg
-
 def ensure_ffmpeg():
     if shutil.which("ffmpeg") is None:
         log.critical("FFmpeg not found in PATH.")
@@ -270,7 +266,6 @@ def ensure_ffmpeg():
     except Exception as e:
         log.critical("FFmpeg probe failed: %s", e)
         return False
-
 def format_time(sec: float) -> str:
     sec = max(0, int(sec))
     if sec >= 3600:
@@ -280,17 +275,14 @@ def format_time(sec: float) -> str:
     else:
         m, s = divmod(sec, 60)
         return f"{m:02d}:{s:02d}"
-
 _CLEAN_PAT = re.compile(r"(?i)\b(official\s*video|lyrics?|audio|hd|hq|remaster(?:ed)?|live|clip|mv|visualizer|topic|karaoke|instrumental|mono|stereo|remix|mix|edit|radio\s*edit|feat\.?.+|ft\.?.+)\b")
 _BRACKETS = re.compile(r"[\(\[\{].*?[\)\]\}]")
 _MULTI_SPACE = re.compile(r"\s{2,}")
-
 def _smart_titlecase(s: str) -> str:
     s = s.strip().title()
     for w in ["And","Or","The","Of","Ft.","Feat.","Vs.","A","An","To","In","On","For","With","From","By","At","As","But"]:
         s = re.sub(rf"\b{w}\b", w.lower(), s)
     return s
-
 def guess_from_filename(path: Path) -> Tuple[Optional[str], Optional[str]]:
     name = path.stem.replace("_"," ").replace("."," ")
     name = re.sub(r"^\s*\d{1,3}\s*[-. ]\s*","",name)
@@ -307,13 +299,11 @@ def guess_from_filename(path: Path) -> Tuple[Optional[str], Optional[str]]:
         parent = _MULTI_SPACE.sub(" ", _BRACKETS.sub(" ", path.parent.name.replace("_"," "))).strip()
         if parent and parent.lower() not in ("music","mp3","tracks","songs"): artist = _smart_titlecase(parent)
     return (title or None, artist or None)
-
 def _norm_key(path: Path | str) -> str:
     try:
         return str(Path(path).resolve()).lower()
     except Exception:
         return str(path).replace("\\", "/").lower()
-
 class Track:
     def __init__(self, path: Path, no_tags: bool=False):
         self.path = path
@@ -324,7 +314,6 @@ class Track:
         self.analysis_ready = False
         log.debug("Track created: %s | title=%s artist=%s dur=%.2fs",
                   path.name, self.title, self.artist, self.duration_sec)
-
     def _read_or_guess_tags(self) -> Tuple[Optional[str], Optional[str]]:
         title=None; artist=None
         try:
@@ -340,27 +329,23 @@ class Track:
         title  = str(title).strip()  if title  and str(title).strip()  else None
         artist = str(artist).strip() if artist and str(artist).strip() else None
         return (title, artist)
-
     def _fast_length(self) -> float:
         try:
             mf = MutaFile(str(self.path))
             if mf and mf.info and getattr(mf.info,"length",None): return float(mf.info.length)
         except Exception: pass
         return 0.0
-
 class AnalysisCache:
     def __init__(self, capacity:int=64):
         self.cap = capacity
         self.od: "collections.OrderedDict[str,Tuple[np.ndarray,int,float]]" = collections.OrderedDict()
         self.lock = threading.Lock()
-
     def get(self, key:str) -> Optional[Tuple[np.ndarray,int,float]]:
         with self.lock:
             v = self.od.get(key)
             if v is not None:
                 self.od.move_to_end(key)
             return v
-
     def put(self, key:str, samples:np.ndarray, sr:int, dur:float):
         with self.lock:
             if key in self.od:
@@ -369,16 +354,13 @@ class AnalysisCache:
             while len(self.od) > self.cap:
                 k,_ = self.od.popitem(last=False)
                 log.debug("AnalysisCache: evict %s", Path(k).name)
-
 AN_CACHE: Optional[AnalysisCache] = None
-
 class Library:
     def __init__(self, exts: Tuple[str,...], ignore_dirs: List[str], no_tags: bool):
         self.tracks: List[Track] = []
         self.exts = tuple(x.lower().strip() for x in exts)
         self.ignore_dirs = set(d.lower() for d in ignore_dirs)
         self.no_tags = no_tags
-
     def scan(self, base_dir: Path):
         log.info("Scanning library: %s", base_dir)
         add = self.tracks.append
@@ -394,7 +376,6 @@ class Library:
                 log.warning("Scan skip (path issue) %s: %s", p, e)
         self.tracks.sort(key=lambda t: str(t.path).lower())
         log.info("Scan complete: %d tracks", len(self.tracks))
-
 def decode_pcm_segment(path: Path, start_sec: float, dur_sec: float, sr=AUDIO.target_sr) -> np.ndarray:
     ss = max(0.0, start_sec)
     cmd = ["ffmpeg","-hide_banner","-loglevel","error","-ss", f"{ss:.3f}","-t", f"{float(dur_sec):.3f}",
@@ -424,7 +405,6 @@ def decode_pcm_segment(path: Path, start_sec: float, dur_sec: float, sr=AUDIO.ta
     seg = data.reshape(-1, 2).astype(np.float32, copy=False)
     seg *= (1.0 / 32768.0)
     return seg
-
 def decode_pcm_segment_robust(path: Path, start_sec: float, dur_sec: float, sr=AUDIO.target_sr, max_retries=2) -> np.ndarray:
     for attempt in range(max_retries):
         try:
@@ -435,7 +415,6 @@ def decode_pcm_segment_robust(path: Path, start_sec: float, dur_sec: float, sr=A
                 return np.zeros((int(dur_sec*sr),2), np.float32)
             time.sleep(0.1 * attempt)
     return np.zeros((int(dur_sec*sr),2), np.float32)
-
 def numpy_to_sound(arr_float_stereo: np.ndarray) -> pygame.mixer.Sound:
     arr = np.clip(arr_float_stereo, -1.0, 1.0)
     arr16 = (arr * 32767.0).astype(np.int16, copy=False)
@@ -443,7 +422,6 @@ def numpy_to_sound(arr_float_stereo: np.ndarray) -> pygame.mixer.Sound:
     if arr16.ndim == 1:
         arr16 = arr16.reshape(-1, 2)
     return pygame.sndarray.make_sound(arr16)
-
 def _hann(size: int) -> np.ndarray:
     h = _hann_cache.get(size)
     if h is None:
@@ -451,7 +429,6 @@ def _hann(size: int) -> np.ndarray:
         h = np.hanning(size).astype(np.float32)
         _hann_cache[size] = h
     return h
-
 def make_fft_window(samples, sr, pos_sec, size=VIS.fft_size):
     key = size
     if key not in _fft_window_cache:
@@ -472,7 +449,6 @@ def make_fft_window(samples, sr, pos_sec, size=VIS.fft_size):
     else:
         window.fill(0.0)
     return window
-
 class BandMapper:
     def __init__(self, n_time: int, sr: int, n_bands: int):
         self.sr = sr
@@ -491,7 +467,6 @@ class BandMapper:
         self._cat_idx = np.concatenate(self.idxs) if len(self.idxs) else np.array([], dtype=int)
         self._split_points = np.cumsum([len(ix) for ix in self.idxs])[:-1] if len(self.idxs) else np.array([], dtype=int)
         self.band_weights = np.linspace(1.15, 0.85, n_bands).astype(np.float32)
-
     def map(self, spectrum_abs: np.ndarray) -> np.ndarray:
         if self._cat_idx.size == 0:
             return np.zeros(self.n_bands, np.float32)
@@ -506,7 +481,6 @@ class BandMapper:
             band_rms /= vmax
         band_rms *= self.band_weights
         return np.clip(band_rms, 0.0, 1.0)
-
 def build_glow_circle_surface(radius:int, glow:int, color_rgb:Tuple[int,int,int], thickness:int=2) -> pygame.Surface:
     key=(radius,glow,color_rgb,thickness)
     if key in _cached_glow: return _cached_glow[key]
@@ -520,10 +494,8 @@ def build_glow_circle_surface(radius:int, glow:int, color_rgb:Tuple[int,int,int]
         gfxdraw.filled_circle(surf, center[0], center[1], radius+i, col)
     _cached_glow[key]=surf
     return surf
-
 def blit_center(dst: pygame.Surface, src: pygame.Surface, pos: Tuple[int,int]):
     dst.blit(src, src.get_rect(center=pos))
-
 def draw_progress_arc_aa(surf, rect, start_angle, fraction, color_rgb, width):
     fraction = max(0.0, min(1.0, fraction))
     color=(*color_rgb,255)
@@ -531,7 +503,6 @@ def draw_progress_arc_aa(surf, rect, start_angle, fraction, color_rgb, width):
     pygame.draw.arc(surf,color,rect,start_angle,end_angle,width)
     for d in (-width//2, width//2):
         pygame.draw.arc(surf, color, rect.inflate(d,d), start_angle, end_angle, 1)
-
 def render_ui_and_text(
     text_surf, w, h, cx, cy,
     pos_now, dur_now, volume,
@@ -785,18 +756,14 @@ def render_ui_and_text(
         text_surf.blit(toast_surf, toast_surf.get_rect(centerx=x_center, y=ty))
         y_stack_top = ty
     return vol_active, int(y_stack_bottom + gap)
-
 def lerp(a,b,t): return a+(b-a)*max(0.0,min(1.0,t))
 def lerp_color(c1,c2,t): return (int(lerp(c1[0],c2[0],t)),int(lerp(c1[1],c2[1],t)),int(lerp(c1[2],c2[2],t)))
-
 def load_system(size:int, bold=True):
     name = pygame.font.match_font('segoe ui,segoeui,arial,tahoma,verdana,calibri,dejavusans', bold=bold)
     return pygame.font.Font(name, size) if name else pygame.font.SysFont(None, size, bold=bold)
-
 def load_cyber(size:int):
     try: return pygame.font.Font(str(FONT_PATH), size)
     except Exception: return load_system(size, bold=True)
-
 def parse_args():
     ap = argparse.ArgumentParser(description="Visual Music Player v0.1")
     ap.add_argument("--music-dir", default=MUSIC_DIR)
@@ -811,7 +778,6 @@ def parse_args():
     ap.add_argument("--no-tags", action="store_true")
     ap.add_argument("--cache-cap", type=int, default=16, help="Max analyzed tracks in memory")
     return ap.parse_args()
-
 def win_toggle_topmost():
     try:
         if platform.system() != "Windows":
@@ -838,7 +804,6 @@ def win_toggle_topmost():
         log.debug("Topmost toggled -> %s", "OFF" if is_top else "ON")
     except Exception as e:
         log.debug("Topmost toggle failed: %s", e)
-
 def win_drag_window():
     try:
         if platform.system() != "Windows":
@@ -854,14 +819,12 @@ def win_drag_window():
         u32.SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0)
     except Exception as e:
         log.debug("Drag failed: %s", e)
-
 def get_desktop_size() -> Tuple[int, int]:
     try:
         info = pygame.display.Info()
         return (max(640, int(info.current_w)), max(480, int(info.current_h)))
     except Exception:
         return (1920, 1080)
-
 def _fbm1(x):
     """Cheap 1D fractal noise (no deps). Returns ~[-1, 1]."""
     return (
@@ -869,7 +832,6 @@ def _fbm1(x):
         np.sin(2.0 * x + 1.7) * 0.28 +
         np.sin(4.0 * x + 0.9) * 0.12
     )
-
 def _fbm2(x, y):
     val = 0.0
     amp = 1.0
@@ -879,14 +841,12 @@ def _fbm2(x, y):
         amp *= 0.5
         freq *= 2.0
     return val * 0.7
-
 class BPMState:
     def __init__(self, max_beats: int = 12):
         self.beat_times = deque(maxlen=max_beats)
         self.bpm_ema = 0.0
         self.last_beat_time = 0.0
         self.confidence = 0.0
-
 def update_bpm_from_flash(
     t: float,
     cur_flash: float,
@@ -953,7 +913,6 @@ def update_bpm_from_flash(
                 state.bpm_ema = 0.0
                 state.confidence = 0.0
     return float(np.clip(state.bpm_ema, 0.0, max_bpm)), float(state.confidence)
-
 def calculate_beam_rotation_speed(
     bpm_est: float,
     confidence: float = 1.0,
@@ -971,22 +930,17 @@ def calculate_beam_rotation_speed(
     omega_base = omega_min + (omega_max - omega_min) * x
     confidence_factor = 1.0 - confidence_influence * (1.0 - float(np.clip(confidence, 0.0, 1.0)))
     return float(omega_base * confidence_factor)
-
 from functools import lru_cache
-
 def _npf32(x): 
     return np.asarray(x, dtype=np.float32)
-
 @lru_cache(maxsize=32)
 def _thetas_cached(N: int) -> np.ndarray:
     if N <= 0:
         return _npf32([])
     return _npf32(np.linspace(0.0, 2.0*np.pi, int(N), endpoint=False))
-
 def _smoothstep(x: np.ndarray, edge0: float, edge1: float) -> np.ndarray:
     t = np.clip((x - edge0) / max(1e-6, (edge1 - edge0)), 0.0, 1.0)
     return _npf32(t * t * (3.0 - 2.0 * t))
-
 def _circ_smooth3(arr: np.ndarray, passes: int = 1) -> np.ndarray:
     if arr.size == 0:
         return arr
@@ -994,24 +948,20 @@ def _circ_smooth3(arr: np.ndarray, passes: int = 1) -> np.ndarray:
     for _ in range(max(0, passes)):
         out = 0.5 * out + 0.25 * np.roll(out, 1) + 0.25 * np.roll(out, -1)
     return out
-
 def _star_sharp(thetas: np.ndarray, k: int, p: float) -> np.ndarray:
     return _npf32(np.abs(np.cos(k * thetas)) ** p)
-
 def _superellipse_r(theta: np.ndarray, n: float) -> np.ndarray:
     n = float(max(1e-3, n))
     c = np.abs(np.cos(theta)) ** n
     s = np.abs(np.sin(theta)) ** n
     denom = np.clip(c + s, 1e-6, None)
     return _npf32(denom ** (-1.0 / n))
-
 def _regular_polygon_r(theta: np.ndarray, sides: int, eps: float = 1e-4) -> np.ndarray:
     n = max(3, int(sides))
     a = np.pi / n
     w = (theta + a) % (2.0 * a) - a
     denom = np.clip(np.cos(w), eps, None)
     return _npf32(np.cos(a) / denom)
-
 SHAPE_MODELS = {
     # Základné kvety
     "flower": lambda N, intensity: 1.0 + (0.2 + intensity * 0.6) * np.cos(6 * _thetas_cached(N)),
@@ -1111,7 +1061,6 @@ SHAPE_MODELS = {
         0.20 * np.sin(5.3 * _thetas_cached(N) + 1.3)
     )
 }
-
 def shape_profile(name: str, N: int, intensity: float = 0.6) -> np.ndarray:
     thetas = _thetas_cached(int(N))
     if thetas.size == 0:
@@ -1170,7 +1119,6 @@ def shape_profile(name: str, N: int, intensity: float = 0.6) -> np.ndarray:
         prof = (prof / m).astype(np.float32)
     prof = np.maximum(prof, 0.10).astype(np.float32)  # strictly positive for renderer safety
     return prof
-
 def glyph_profile(
     ch: str,
     N: int,
@@ -1332,24 +1280,20 @@ def glyph_profile(
             _glyph_cache.pop(k, None)
             _glyph_cache_access.pop(k, None)
     return prof
-
 def clear_glyph_cache():
     _glyph_cache.clear()
     _glyph_cache_access.clear()
-
 def get_glyph_cache_stats() -> Dict[str, float]:
     return {
         "entries": float(len(_glyph_cache)),
         "memory_mb": float(sum(arr.nbytes for arr in _glyph_cache.values()) / (1024*1024))
     }
-
 class CyberpunkLexicon:
     def __init__(self, tokens=None, uppercase=True, dedupe=True):
         self.uppercase = bool(uppercase)
         self.tokens = []
         if tokens:
             self.set_tokens(tokens, dedupe=dedupe)
-
     def set_tokens(self, tokens, dedupe=True):
         toks = [str(t).strip() for t in tokens if str(t).strip()]
         if self.uppercase:
@@ -1362,7 +1306,6 @@ class CyberpunkLexicon:
             toks = out
         self.tokens = toks
         return self
-
     def set_tokens_from_str(self, s, separators=None, dedupe=True):
         if separators is None:
             separators = [",", ";", "|", "", "\t"]
@@ -1370,14 +1313,12 @@ class CyberpunkLexicon:
         for sep in separators:
             parts = sum((frag.split(sep) for frag in parts), [])
         return self.set_tokens(parts, dedupe=dedupe)
-
     def word(self, rng=None) -> str:
         import random as _r
         r = rng if rng is not None else _r
         if not self.tokens:
             return "NEON"
         return r.choice(self.tokens)
-
 LEX = CyberpunkLexicon().set_tokens([
     # Artificial intelligence / machines
     "AI", "BOT", "DRONE", "ROBOT", "CORE", "NODE", "DATA", "CODE",
@@ -1394,7 +1335,6 @@ LEX = CyberpunkLexicon().set_tokens([
     # Existential / mind
     "MIND", "SOUL", "GHOST"
 ])
-
 def _precompute_masks():
     """Predpočíta masky pre FFT"""
     global _bass_mask_f, _voice_mask_f
@@ -1404,7 +1344,6 @@ def _precompute_masks():
     if _voice_mask_f is None:
         freqs_voice = np.fft.rfftfreq(VIS.fft_size, 1/AUDIO.target_sr)
         _voice_mask_f = smooth_mask(freqs_voice, AUDIO.voice_low_hz, AUDIO.voice_high_hz, 0.20)
-
 def smooth_mask(freqs, low, high, roll=0.15):
     m = np.zeros_like(freqs, dtype=np.float32)
     band = (freqs>=low) & (freqs<=high)
@@ -1420,7 +1359,6 @@ def smooth_mask(freqs, low, high, roll=0.15):
         x = 1 - (freqs[right]-high)/r
         m[right] = 0.5*(1-np.cos(np.pi*x))
     return m
-
 def _draw_beams(vis_surf, x0, y0, cur_angles, bands_in, bar_len_mul, bar_thick_mul, n_bands):
     """Optimalizované vykresľovanie lúčov"""
     step = 1
@@ -1435,7 +1373,6 @@ def _draw_beams(vis_surf, x0, y0, cur_angles, bands_in, bar_len_mul, bar_thick_m
         x1 = int(x0[i] + L * ca)
         y1 = int(y0[i] + L * sa)
         pygame.draw.line(vis_surf, (*VIS.bar_color, 255), (x0[i], y0[i]), (x1, y1), width=thickness)
-
 def _draw_flubber_ring(vis_surf, outer_pts, inner_pts, n_points, fill_col, edge_col, fps):
     """Optimalizované vykresľovanie flubber kruhu"""
     for i in range(n_points):
@@ -1453,7 +1390,6 @@ def _draw_flubber_ring(vis_surf, outer_pts, inner_pts, n_points, fill_col, edge_
         pygame.draw.aalines(vis_surf, edge_col, True, outer_loop)
     if len(inner_loop) > 2 and (fps >= 50):
         pygame.draw.aalines(vis_surf, edge_col, True, inner_loop)
-
 def _update_bpm_detection(t, cur_flash, prev_flash, bass_env, state):
     """Oddelená BPM detekcia"""
     return update_bpm_from_flash(
@@ -1465,7 +1401,6 @@ def _update_bpm_detection(t, cur_flash, prev_flash, bass_env, state):
         beat_min_gap=AUDIO.beat_min_gap,
         min_abs_env=0.12,
     )
-
 def draw_centered_track_info(screen, current_track, pos_now, dur_now, energy_color, show_title, show_time):
     """Vykreslí názov skladby a čas pod hlavným kruhom"""
     if not show_title or not show_time:
@@ -1490,7 +1425,6 @@ def draw_centered_track_info(screen, current_track, pos_now, dur_now, energy_col
     time_rect = time_surf.get_rect(center=(cx, cy + VIS.centered_info_offset_y + 30))
     info_surf.blit(time_surf, time_rect)
     screen.blit(info_surf, (0, 0))
-
 def draw_visuals(screen, vis_surf, state):
     # Predpočítať masky ak ešte neexistujú
     _precompute_masks()
@@ -1664,7 +1598,7 @@ def draw_visuals(screen, vis_surf, state):
                 'angle': draw_visuals._rng.uniform(0.0, 2*np.pi),
                 'distance': radius * draw_visuals._rng.uniform(1.2, 1.8),
                 'size': draw_visuals._rng.integers(3, 8),
-                'color': (100, 100, 100),
+                'color': (218, 180, 80), 
                 'orbit_speed': draw_visuals._rng.uniform(1.0, 3.0) * (bpm_est / 120.0)
             }
             draw_visuals._satellites.append(satellite)
@@ -1856,7 +1790,6 @@ def draw_visuals(screen, vis_surf, state):
         if draw_visuals._shape_last and pool and pool[0] == draw_visuals._shape_last:
             pool.append(pool.pop(0))
         draw_visuals._shape_pool = pool
-
     def _pick_unique_shape() -> str:
         if not draw_visuals._shape_pool:
             _refill_shape_pool()
@@ -1873,7 +1806,6 @@ def draw_visuals(screen, vis_surf, state):
                 name = alt
         draw_visuals._shape_last = name
         return name
-
     def _start_morph():
         name = _pick_unique_shape()
         inten = float(draw_visuals._rng.uniform(0.4, 0.8))
@@ -1907,7 +1839,6 @@ def draw_visuals(screen, vis_surf, state):
             "sx": float(sx_now),
             "sy": float(sy_now),
         })
-
     if (draw_visuals._shape_count < 8) and (not draw_visuals._shape_active) and draw_visuals._morph_times:
         for idx, tt in enumerate(draw_visuals._morph_times):
             if idx in draw_visuals._morph_used:
@@ -1916,7 +1847,6 @@ def draw_visuals(screen, vis_surf, state):
                 draw_visuals._morph_used.add(idx)
                 _start_morph()
                 break
-
     shape_w = 0.0
     if draw_visuals._shape_active and draw_visuals._shape_profile is not None:
         if t >= draw_visuals._shape_t1:
@@ -1927,15 +1857,12 @@ def draw_visuals(screen, vis_surf, state):
             fin = min(1.0, (t - draw_visuals._shape_t0) / max(1e-3, draw_visuals._morph_fade))
             fout = min(1.0, (draw_visuals._shape_t1 - t) / max(1e-3, draw_visuals._morph_fade))
             shape_w = fin*fin*(3-2*fin) * fout*fout*(3-2*fout)
-
     draw_visuals._organic_phase = (draw_visuals._organic_phase + dt * VIS.organic_pulse_speed) % (2*np.pi)
     draw_visuals._pulse_intensity = 0.5 + 0.5 * math.sin(draw_visuals._organic_phase)
-
     if draw_visuals._body_ripple_active:
         draw_visuals._body_ripple_phase += 5.0 * dt
         if draw_visuals._body_ripple_phase > 2 * math.pi:
             draw_visuals._body_ripple_active = False
-
     omega = calculate_beam_rotation_speed(
         bpm_est=float(bpm_est),
         confidence=float(getattr(draw_visuals, "_bpm_conf", 1.0)),
@@ -1948,7 +1875,6 @@ def draw_visuals(screen, vis_surf, state):
     cur_angles = (draw_visuals._base_angles + draw_visuals._rot_phase).astype(np.float32)
     x0 = (cx_off + (radius + rim_pad) * np.cos(cur_angles)).astype(np.int32)
     y0 = (cy_off + (radius + rim_pad) * np.sin(cur_angles)).astype(np.int32)
-
     # Draw beams
     # Draw beams WITH YELLOW PEAKS
     if not hasattr(draw_visuals, "_beam_peaks"):
@@ -1989,7 +1915,6 @@ def draw_visuals(screen, vis_surf, state):
         # Nakresli žltý peak (tenší a kratší)
         if peak_L > L + 2:  # Iba ak je peak aspoň o 2 pixely dlhší ako hlavný lúč
              pygame.draw.line(vis_surf, (*VIS.red, 255), (x1, y1), (px1, py1), width=max(1, thickness//2))
-
     # Flubber ring
     n_points = int(VIS.flub_points)
     if (not hasattr(draw_visuals, "_angles")) or len(draw_visuals._angles) != n_points:
@@ -2179,13 +2104,107 @@ def draw_visuals(screen, vis_surf, state):
     draw_visuals._prev_inner[:] = inner_pts
     draw_visuals._have_prev = True
     # Farby podľa energie
-    # Farby flubbera - FIXNÁ ŽLTÁ (ako peaks)
+    # >>>> FARBY FLUBBERA PRENESIETE DO KONŠTÁNT <<<<
     # fill_col = VIS.yellow  # Výplň
     # edge_col = lerp_color(VIS.yellow, (255, 255, 255), 0.3)  # Okraj je o niečo svetlejší
-    fill_col = (180, 180, 180   )  # Tmavosivá výplň
-    edge_col = (100, 100, 100) # VIS.red  Červený obrys (ako varovanie / energia)
+    # Farby flubbera - oranžová ako rays
+    # fill_col = (212, 114, 22)   # oranžová výplň (rovnaká ako rays_color)
+    # edge_col = (255, 200, 80)   # svetlejší oranžovo-žltý okraj (ako peaks highlight)
+    # fill_col = VIS.rays_color   # oranžová výplň (rovnaká ako rays_color)
+    fill_col = VIS.bar_color   # oranžová výplň (rovnaká ako rays_color)
+    # edge_col = lerp_color(VIS.rays_color, (255, 255, 255), 0.3)   # svetlejší okraj
+    edge_col = lerp_color(VIS.bar_color, (255, 255, 255), 0.3)   # svetlejší okraj
+    # ========== RANDOM 3D EFFECTS FOR FLUBBER ==========
+    # Apply 3D lighting and depth effect
+    if not hasattr(draw_visuals, "_3d_phases"):
+        draw_visuals._3d_phases = np.random.uniform(0, 2*np.pi, n_points).astype(np.float32)
+        draw_visuals._3d_depths = np.random.uniform(-1, 1, n_points).astype(np.float32)
+    
+    # Calculate 3D lighting based on position and light source
+    light_dir = np.array([math.cos(VIS.flub_light_angle), math.sin(VIS.flub_light_angle)], dtype=np.float32)
+    normals = np.zeros((n_points, 2), dtype=np.float32)
+    
+    # Calculate normals for each point
+    for i in range(n_points):
+        prev_i = (i - 1) % n_points
+        next_i = (i + 1) % n_points
+        # Calculate tangent
+        tangent = np.array([
+            outer_pts[next_i, 0] - outer_pts[prev_i, 0],
+            outer_pts[next_i, 1] - outer_pts[prev_i, 1]
+        ], dtype=np.float32)
+        tangent_norm = np.linalg.norm(tangent)
+        if tangent_norm > 1e-6:
+            tangent /= tangent_norm
+            # Calculate normal (perpendicular to tangent)
+            normals[i] = np.array([-tangent[1], tangent[0]], dtype=np.float32)
+        else:
+            normals[i] = np.array([0, 1], dtype=np.float32)
+    
+    # Normalize normals
+    normal_magnitudes = np.linalg.norm(normals, axis=1)
+    normal_magnitudes[normal_magnitudes < 1e-6] = 1.0
+    normals /= normal_magnitudes[:, np.newaxis]
+    
+    # Calculate lighting intensity
+    light_intensity = np.dot(normals, light_dir)
+    light_intensity = np.clip(light_intensity, 0.0, 1.0)
+    
+    # Add specular highlights
+    view_dir = np.array([0, 0], dtype=np.float32)  # Simplified view direction
+    half_vector = (light_dir + view_dir) / np.linalg.norm(light_dir + view_dir + 1e-6)
+    specular = np.power(np.clip(np.sum(normals * half_vector, axis=1), 0.0, 1.0), VIS.flub_specular_power)
+    
+    # Add random 3D depth effect
+    depth_factor = 1.0 + VIS.flub_depth_multiplier * draw_visuals._3d_depths * bass_env
+    
+    # Animate 3D phases for dynamic effect
+    draw_visuals._3d_phases += dt * 0.5 * (1.0 + bass_env)
+    depth_animation = 0.1 * np.sin(draw_visuals._3d_phases + t * 2.0) * bass_env
+    depth_factor += depth_animation
+    
+    # Apply 3D effects to points
+    center = np.array([cx_off, cy_off], dtype=np.float32)
+    for i in range(n_points):
+        # Calculate vector from center to point
+        to_point = np.array([outer_pts[i, 0] - cx_off, outer_pts[i, 1] - cy_off], dtype=np.float32)
+        distance = np.linalg.norm(to_point)
+        if distance > 1e-6:
+            direction = to_point / distance
+            # Apply depth factor (points move in/out based on depth)
+            new_distance = distance * depth_factor[i]
+            outer_pts[i, 0] = cx_off + direction[0] * new_distance
+            outer_pts[i, 1] = cy_off + direction[1] * new_distance
+            
+            # Apply same effect to inner points
+            to_inner = np.array([inner_pts[i, 0] - cx_off, inner_pts[i, 1] - cy_off], dtype=np.float32)
+            inner_distance = np.linalg.norm(to_inner)
+            if inner_distance > 1e-6:
+                inner_direction = to_inner / inner_distance
+                new_inner_distance = inner_distance * depth_factor[i]
+                inner_pts[i, 0] = cx_off + inner_direction[0] * new_inner_distance
+                inner_pts[i, 1] = cy_off + inner_direction[1] * new_inner_distance
+    
+    # Create 3D lighting effect on fill color
+    r, g, b = fill_col
+    # Base lighting - make fill color brighter on lit areas
+    lit_fill_col = (
+        min(255, int(r * (1.0 + VIS.flub_3d_intensity * light_intensity.mean()))),
+        min(255, int(g * (1.0 + VIS.flub_3d_intensity * light_intensity.mean()))),
+        min(255, int(b * (1.0 + VIS.flub_3d_intensity * light_intensity.mean())))
+    )
+    
+    # Add specular highlights to edge color
+    spec_intensity = specular.mean()
+    edge_r, edge_g, edge_b = edge_col
+    highlighted_edge_col = (
+        min(255, int(edge_r + 100 * spec_intensity)),
+        min(255, int(edge_g + 100 * spec_intensity)),
+        min(255, int(edge_b + 100 * spec_intensity))
+    )
+    # ========== END RANDOM 3D EFFECTS FOR FLUBBER ==========
     # Vykreslenie flubber kruhu
-    _draw_flubber_ring(vis_surf, outer_pts, inner_pts, n_points, fill_col, edge_col, fps)
+    _draw_flubber_ring(vis_surf, outer_pts, inner_pts, n_points, lit_fill_col, highlighted_edge_col, fps)
     # Vykreslenie satelitov
     for satellite in list(draw_visuals._satellites):
         satellite['angle'] += satellite['orbit_speed'] * dt
@@ -2240,7 +2259,6 @@ def draw_visuals(screen, vis_surf, state):
     if draw_visuals._bpm_state.last_beat_time != prev_last_beat:
         draw_visuals._body_ripple_active = True
         draw_visuals._body_ripple_phase = 0.0
-
 def apply_sepia(surface: pygame.Surface, strength: float = 0.8) -> None:
     w, h = surface.get_size()
     s = max(0.0, min(1.0, float(strength)))
@@ -2250,7 +2268,6 @@ def apply_sepia(surface: pygame.Surface, strength: float = 0.8) -> None:
     add = pygame.Surface((w, h), pygame.SRCALPHA)
     add.fill((40, 20, 0, int(60 * s)))
     surface.blit(add, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-
 def main():
     args = parse_args()
     setup_logging(args.debug)
@@ -2287,7 +2304,6 @@ def main():
                 seg_req_q.task_done()
         except queue.Empty:
             pass
-
     def segment_prefetch_worker():
         log.debug("Segment prefetch worker started")
         while seg_worker_should_run:
@@ -2309,23 +2325,19 @@ def main():
             finally:
                 seg_req_q.task_done()
         log.debug("Segment prefetch worker exit")
-
     seg_worker = threading.Thread(target=segment_prefetch_worker, daemon=True)
     seg_worker.start()
-
     playback_mode = "music"
     current_main_sound: Optional[pygame.mixer.Sound] = None
     fake_fullscreen = False
     prev_window_pos = (100, 100)
     prev_window_size = (1280, 720)
-
     def remember_window_rect():
         nonlocal prev_window_pos, prev_window_size
         try: prev_window_pos = pygame.display.get_window_position()
         except Exception: pass
         prev_window_size = screen.get_size()
         log.debug("Remember window rect pos=%s size=%s", prev_window_pos, prev_window_size)
-
     def get_display_size_for_current():
         try:
             idx = pygame.display.get_window_display_index()
@@ -2333,10 +2345,8 @@ def main():
             if 0 <= idx < len(sizes): return sizes[idx]
         except Exception: pass
         return get_desktop_size()
-
     vis_surf = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
     text_surf = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-
     def after_mode_change_rescale():
         nonlocal vis_surf, text_surf
         w,h = screen.get_size()
@@ -2347,7 +2357,6 @@ def main():
         else:
             choose_background(True)
         log.debug("Rescaled after mode change -> %dx%d", w, h)
-
     def exit_fake_fullscreen():
         nonlocal screen, fake_fullscreen
         # Obnovíme predchádzajúcu veľkosť a pozíciu
@@ -2359,7 +2368,6 @@ def main():
             del os.environ['SDL_VIDEO_WINDOW_POS']
         after_mode_change_rescale()
         log.debug("Exited borderless fullscreen -> windowed: %dx%d at %s", prev_window_size[0], prev_window_size[1], prev_window_pos)
-
     def enter_fake_fullscreen():
         nonlocal screen, fake_fullscreen
         try:
@@ -2372,7 +2380,6 @@ def main():
         fake_fullscreen = True
         if 'SDL_VIDEO_WINDOW_POS' in os.environ: del os.environ['SDL_VIDEO_WINDOW_POS']
         after_mode_change_rescale()
-
     def exit_fake_fullscreen():
         nonlocal screen, fake_fullscreen
         os.environ['SDL_VIDEO_WINDOW_POS'] = f"{prev_window_pos[0]},{prev_window_pos[1]}"
@@ -2381,16 +2388,13 @@ def main():
         fake_fullscreen = False
         if 'SDL_VIDEO_WINDOW_POS' in os.environ: del os.environ['SDL_VIDEO_WINDOW_POS']
         after_mode_change_rescale()
-
     def toggle_fake_fullscreen():
         if fake_fullscreen: exit_fake_fullscreen()
         else: remember_window_rect(); enter_fake_fullscreen()
-
     font_small_sys = load_system(16, bold=True)
     font_mid_sys = load_system(50, bold=True)
     title_font = load_cyber(VIS.title_font_size)
     vol_font_sys = load_system(18, bold=True)
-
     base = Path(args.music_dir)
     if not base.exists():
         print(f"MUSIC_DIR not found: {base}")
@@ -2400,21 +2404,18 @@ def main():
     lib = Library(ext_tuple, ignore_dirs, args.no_tags); lib.scan(base)
     if not lib.tracks:
         print("No supported audio files found."); sys.exit(1)
-
     bg_paths: List[Path] = []
     if args.backgrounds:
         bgdir = Path(args.backgrounds).expanduser()
         if bgdir.exists():
             for p in sorted(bgdir.rglob("*")):
                 if p.suffix.lower() in (".jpg",".jpeg",".png"): bg_paths.append(p)
-
     bg_enabled = bool(bg_paths)
     bg_index = 0
     current_bg: Optional[pygame.Surface] = None
     bg_dark: Optional[pygame.Surface] = None
     original_bg_surface: Optional[pygame.Surface] = None
     bg_size_cache: Dict[Tuple[int,int], pygame.Surface] = {}
-
     def choose_background(force=False):
         nonlocal current_bg, bg_dark, bg_index, original_bg_surface, bg_size_cache
         if not bg_enabled or not bg_paths:
@@ -2437,7 +2438,6 @@ def main():
             log.debug("Background loaded: %s", p.name)
         except Exception as e:
             log.debug("BG load fail: %s", e); current_bg=None; bg_dark=None; original_bg_surface=None; bg_size_cache.clear()
-
     def rescale_background_for_size():
         nonlocal current_bg, bg_dark
         if original_bg_surface is None: return
@@ -2454,19 +2454,16 @@ def main():
             bg_size_cache[key]=current_bg
         bg_dark=pygame.Surface((w,h), pygame.SRCALPHA); bg_dark.fill((0,0,0,110))
         log.debug("Background rescaled -> %s", key)
-
     v_states = []
     for show_hud in (False, True):
         for show_fps in (False, True):
             for show_time in (False, True):
                 for show_title in (False, True):
                     v_states.append({"hud":show_hud,"fps":show_fps,"time":show_time,"title":show_title})
-
     def find_state_idx(hud,fps,timev,title):
         for i,s in enumerate(v_states):
             if (s["hud"],s["fps"],s["time"],s["title"])==(hud,fps,timev,title): return i
         return 0
-
     preset_indices = [
         find_state_idx(True, False, False, False),
         find_state_idx(True, True,  False, False),
@@ -2475,15 +2472,12 @@ def main():
         find_state_idx(False,False, False, False),
     ]
     v_mode = preset_indices[3]
-
     def v_mode_desc(m):
         st=v_states[m%len(v_states)]
         return f"HUD {'ON' if st['hud'] else 'OFF'} / FPS {'ON' if st['fps'] else 'OFF'} / TIME {'ON' if st['time'] else 'OFF'} / TITLE {'ON' if st['title'] else 'OFF'}"
-
     help_visible = False
     sepia_enabled = False
     help_cache_surf: Optional[pygame.Surface] = None
-
     def build_help_surface(w: int, h: int) -> pygame.Surface:
         pad = 14
         lines = [
@@ -2530,7 +2524,6 @@ def main():
             box.blit(t, (pad, cy2)); cy2 += t.get_height() + 4
         surf.blit(box, (x, y))
         return surf
-
     n = len(lib.tracks)
     shuffle = bool(args.shuffle)
     repeat_all = bool(args.repeat_all)
@@ -2540,17 +2533,14 @@ def main():
     else:
         order = list(range(n))
     index_in_order = 0
-
     def display_title(t: Track) -> str:
         title = t.title; artist= t.artist
         if not title:
             g_title, _ = guess_from_filename(t.path); title = g_title
         if not title: return ""
         return f"{artist} — {title}" if artist else title
-
     current_track: Track = lib.tracks[order[index_in_order]]
     log.debug("Initial track: %s", current_track.path.name)
-
     def stop_all_playback():
         nonlocal current_main_sound
         try: pygame.mixer.music.stop()
@@ -2558,14 +2548,12 @@ def main():
         try: chan_main.stop()
         except Exception: pass
         current_main_sound = None
-
     def set_play_start(start_sec: float):
         nonlocal play_start_monotonic, paused_accum, pause_started
         play_start_monotonic = time.monotonic() - start_sec
         paused_accum = 0.0
         pause_started = None
         log.debug("Set play start: %.3f", start_sec)
-
     def get_play_pos() -> float:
         if paused:
             if pause_started is not None:
@@ -2576,7 +2564,6 @@ def main():
             if pos_ms is not None and pos_ms >= 0:
                 return pos_ms / 1000.0
         return max(0.0, time.monotonic() - play_start_monotonic - paused_accum)
-
     def seek_relative(delta_sec: float):
         cur = get_play_pos()
         dur = current_track.duration_sec or max(0.0, cur + 1.0)
@@ -2585,7 +2572,6 @@ def main():
         seek_and_play_with_ffmpeg(current_track, new_pos, volume)
         log.debug("Seek relative %.2f -> new_pos=%.2f (mode=%s)", delta_sec, new_pos, playback_mode)
         return new_pos
-
     def play_track_music(track: Track, start_sec: float = 0.0, volume: float = 0.85):
         nonlocal playback_mode
         stop_all_playback()
@@ -2598,7 +2584,6 @@ def main():
         set_play_start(0.0)
         playback_mode = "music"
         pygame.mixer.music.set_volume(volume)
-
     def seek_and_play_with_ffmpeg(track: Track, start_sec: float, volume: float = 0):
         nonlocal playback_mode, current_main_sound, seg_cur_start, seg_cur_len
         stop_all_playback()
@@ -2633,7 +2618,6 @@ def main():
         set_play_start(max(0.0, float(start_sec)))
         seg_cur_start = start_sec
         seg_cur_len = dur_left
-
     def maybe_queue_next_segment(pos_now: float):
         nonlocal seg_cur_start, seg_cur_len, playback_mode
         if playback_mode != "channel":
@@ -2680,7 +2664,6 @@ def main():
                     seg_req_q.put_nowait((current_track.path, seg_end, float(next_len)))
                 except queue.Full:
                     pass
-
     volume = 0.85
     last_unmuted_volume = 0.85
     muted = False
@@ -2692,7 +2675,6 @@ def main():
     band_mapper_full = BandMapper(VIS.fft_size, AUDIO.target_sr, VIS.n_bands)
     hann_full = _hann(VIS.fft_size)
     hann_bass = _hann(VIS.bass_fft)
-
     def smooth_mask(freqs, low, high, roll=0.15):
         m = np.zeros_like(freqs, dtype=np.float32)
         band = (freqs>=low) & (freqs<=high)
@@ -2708,7 +2690,6 @@ def main():
             x = 1 - (freqs[right]-high)/r
             m[right] = 0.5*(1-np.cos(np.pi*x))
         return m
-
     freqs_bass = np.fft.rfftfreq(VIS.bass_fft, 1/AUDIO.target_sr)
     bass_mask_f = smooth_mask(freqs_bass, AUDIO.bass_low_hz, AUDIO.bass_high_hz, roll=0.25)
     freqs_voice = np.fft.rfftfreq(VIS.fft_size, 1/AUDIO.target_sr)
@@ -2720,7 +2701,6 @@ def main():
     fft_last_bands = np.zeros(VIS.n_bands, np.float32)
     fft_last_bass_energy = 0.0
     fft_last_voice_energy = 0.0
-
     def load_track_samples_quick(path: Path) -> Tuple[np.ndarray,int,float]:
         try:
             seg = AudioSegment.from_file(path).set_frame_rate(AUDIO.target_sr).set_channels(2).set_sample_width(2)
@@ -2733,9 +2713,7 @@ def main():
         except Exception as e:
             log.debug("load_track_samples_quick failed for %s: %s", path.name, e)
             return np.zeros(0, np.float16), AUDIO.target_sr, 0.0
-
     PRIO_NOW = 0
-
     def fft_worker():
         nonlocal fft_last_bands, fft_last_bass_energy, fft_last_voice_energy
         log.debug("FFT thread started")
@@ -2819,7 +2797,6 @@ def main():
                     fft_last_voice_energy = base
                 log.debug("fft_worker error: %s", e)
         log.debug("FFT thread exit")
-
     from queue import PriorityQueue
     load_q: "PriorityQueue[tuple[int,int,str,Path]]" = PriorityQueue()
     load_should_run = True
@@ -2827,10 +2804,8 @@ def main():
     PRIO_NOW = 0
     PRIO_PREFETCH = 5
     PRIO_BULK = 9
-
     def _put_load(prio: int, action: str, path: Path):
         load_q.put((prio, next(_load_seq), action, path))
-
     def loader_worker_fn():
         log.debug("Loader worker started")
         while load_should_run:
@@ -2857,7 +2832,6 @@ def main():
             finally:
                 load_q.task_done()
         log.debug("Loader worker exit")
-
     # Initialize cache with configured capacity (moved BEFORE starting threads)
     global AN_CACHE
     AN_CACHE = AnalysisCache(capacity=max(1, args.cache_cap))
@@ -2869,7 +2843,6 @@ def main():
         t = threading.Thread(target=loader_worker_fn, daemon=True)
         t.start()
         loader_threads.append(t)
-
     time_last_sec = -1
     time_cache_surf: Optional[pygame.Surface] = None
     title_cache_key = None
@@ -2879,17 +2852,14 @@ def main():
     last_volume_popup_t = 0.0
     toast_msg = ""
     toast_until = 0.0
-
     def show_toast(msg: str):
         nonlocal toast_msg, toast_until
         toast_msg = msg
         toast_until = time.time() + UI.toast_sec
         log.debug("Toast: %s", msg)
-
     def build_hud():
         ui=f"[S]huffle: {'ON' if shuffle else 'OFF'}  [R]epeat: {'ALL' if repeat_all else 'OFF'}  [F] Fake Fullscreen  [V/F2] View: {v_mode_desc(v_mode)}  [H] Help  [1..5] Presets"
         return font_small_sys.render(ui, True, VIS.text_dim)
-
     choose_background(False)
     flash=0.0
     bass_env = 0.0
@@ -2920,7 +2890,6 @@ def main():
     current_lyrics = []
     lyrics_font = load_cyber(24)  # Font pre text piesne
     # ========== END LYRICS STATE ========== (NOVÝ KÓD)
-
     while running:
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
@@ -3349,6 +3318,5 @@ def main():
             seg_worker.join(timeout=0.5)
         pygame.quit()
         log.debug("Exited cleanly")
-
 if __name__=="__main__":
     main()
