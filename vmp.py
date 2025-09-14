@@ -3141,6 +3141,7 @@ def main():
         else:
             screen.fill(VIS.bg_color)
         vis_surf.fill((0,0,0,0))
+        vis_surf.set_clip(pygame.Rect(0, 0, w, h)) 
         # text_surf: will be cleared in render_ui_and_text()
         if (not paused) and ((frame_idx % max(1, int(VIS.fft_every_n_frames))) == 0):
             with fft_lock: fft_req_pos = pos_now
@@ -3190,6 +3191,7 @@ def main():
         }
         draw_visuals(screen, vis_surf, state)
         screen.blit(vis_surf, (0, 0))
+        vis_surf.set_clip(None) 
         w, h = screen.get_size()
         cx, cy = w // 2, h // 2
         st_view = v_states[v_mode]
